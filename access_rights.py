@@ -76,7 +76,8 @@ def main():
     try:
         for pvname in pvnames:
             try:
-                access[pvname] = str(check_access_security(host_name, pvname, udp_sock=udp_sock))
+                rights = check_access_security(host_name, pvname, udp_sock=udp_sock)
+                access[pvname] = str(rights).split(".")[1]
             except TimeoutError:
                 access[pvname] = "timeout"
     finally:
