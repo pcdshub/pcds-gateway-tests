@@ -1,0 +1,18 @@
+*.swp
+__pycache__
+build
+*.pyc
+
+#Coverage Reports
+htmlcov
+.coverage
+.cache
+
+*.egg-info
+logs
+
+#pytest
+.pytest_cache
+.vscode
+
+/tags
