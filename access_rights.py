@@ -1,3 +1,4 @@
+import json
 import socket
 import sys
 from typing import Optional
@@ -69,11 +70,19 @@ host_name, *pvnames = sys.argv[1:]
 
 udp_sock = caproto.bcast_socket()
 udp_sock.bind(("", 0))
+
+access = {}
+results = {
+    "hostname": host_name,
+    "access": access
+}
 try:
     for pvname in pvnames:
         try:
-            print(pvname, check_access_security(host_name, pvname, udp_sock=udp_sock))
+            access[pvname] = str(check_access_security(host_name, pvname, udp_sock=udp_sock))
         except TimeoutError:
-            print(pvname, "timeout")
+            access[pvname] = "timeout"
 finally:
     udp_sock.close()
+
+print(json.dumps(results, indent=4))
