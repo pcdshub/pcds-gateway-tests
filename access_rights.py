@@ -65,24 +65,29 @@ def check_access_security(
             del client.global_circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
-host_name, *pvnames = sys.argv[1:]
+def main():
+    host_name, *pvnames = sys.argv[1:]
 # caproto.config_caproto_logging(level="DEBUG")
 
-udp_sock = caproto.bcast_socket()
-udp_sock.bind(("", 0))
+    udp_sock = caproto.bcast_socket()
+    udp_sock.bind(("", 0))
 
-access = {}
-results = {
-    "hostname": host_name,
-    "access": access
-}
-try:
-    for pvname in pvnames:
-        try:
-            access[pvname] = str(check_access_security(host_name, pvname, udp_sock=udp_sock))
-        except TimeoutError:
-            access[pvname] = "timeout"
-finally:
-    udp_sock.close()
+    access = {}
+    try:
+        for pvname in pvnames:
+            try:
+                access[pvname] = str(check_access_security(host_name, pvname, udp_sock=udp_sock))
+            except TimeoutError:
+                access[pvname] = "timeout"
+    finally:
+        udp_sock.close()
 
-print(json.dumps(results, indent=4))
+    return {
+        "hostname": host_name,
+        "access": access
+    }
+
+
+if __name__ == '__main__':
+    results = main()
+    print(json.dumps(results, indent=4))
