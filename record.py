@@ -21,6 +21,7 @@ class CorePVInfo:
     error: Optional[str] = None
     time_md: Optional[dict[str, Any]] = None
     control_md: Optional[dict[str, Any]] = None
+    address: Optional[tuple[str, int]] = None
 
 
 @contextlib.contextmanager
@@ -140,6 +141,7 @@ def check_basics(
                     value=time_value.data,
                     time_md=time_value.metadata.to_dict(),
                     control_md=control_value.metadata.to_dict(),
+                    address=chan.circuit.address,
                 )
     finally:
         if chan is not None:
