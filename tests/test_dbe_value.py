@@ -1,58 +1,35 @@
 #!/usr/bin/env python
-import os
+import logging
 import time
-import unittest
 
+import conftest
 import epics
-import GatewayControl
-import gwtests
-import IOCControl
+
+logger = logging.getLogger(__name__)
 
 
-class TestDBEValue(unittest.TestCase):
-    """Test value updates (client using DBE_VALUE flag) through the Gateway"""
+@conftest.standard_test_environment_decorator
+def test_value_no_deadband():
+    """DBE_VALUE monitor on an ai - value changes generate events."""
+    events_received = 0
 
-    def setUp(self):
-        gwtests.setup()
-        self.iocControl = IOCControl.IOCControl()
-        self.gatewayControl = GatewayControl.GatewayControl()
-        self.iocControl.startIOC()
-        self.gatewayControl.startGateway()
-        os.environ["EPICS_CA_AUTO_ADDR_LIST"] = "NO"
-        os.environ[
-            "EPICS_CA_ADDR_LIST"
-        ] = f"localhost:{gwtests.iocPort} localhost:{gwtests.gwPort}"
-        epics.ca.initialize_libca()
-        self.eventsReceived = 0
+    def on_change(pvname=None, **kws):
+        nonlocal events_received
+        events_received += 1
+        logger.info(f' GW update: {pvname} changed to {kws["value"]}')
 
-    def tearDown(self):
-        epics.ca.finalize_libca()
-        self.gatewayControl.stop()
-        self.iocControl.stop()
+    # gateway:passive0 is a blank ai record
+    ioc, gw = conftest.get_pv_pair(
+        "passive0",
+        auto_monitor=epics.dbr.DBE_VALUE,
+        gateway_callback=on_change
+    )
+    ioc.get()
+    gw.get()
 
-    def onChange(self, pvname=None, **kws):
-        self.eventsReceived += 1
-        if gwtests.verbose:
-            print(pvname, " changed to ", kws["value"])
+    for val in range(10):
+        ioc.put(val, wait=True)
+    time.sleep(0.1)
 
-    def testValueNoDeadband(self):
-        """DBE_VALUE monitor on an ai - value changes generate events."""
-        # gateway:passive0 is a blank ai record
-        ioc = epics.PV("ioc:passive0", auto_monitor=epics.dbr.DBE_VALUE)
-        gw = epics.PV("gateway:passive0", auto_monitor=epics.dbr.DBE_VALUE)
-        gw.add_callback(self.onChange)
-        ioc.get()
-        gw.get()
-
-        for val in range(10):
-            ioc.put(val, wait=True)
-        time.sleep(0.1)
-
-        # We get 11 events: at connection, then at 10 value changes (puts)
-        assert (
-            self.eventsReceived == 11
-        ), "events expected: 11; events received: " + str(self.eventsReceived)
-
-
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    # We get 11 events: at connection, then at 10 value changes (puts)
+    assert events_received == 11

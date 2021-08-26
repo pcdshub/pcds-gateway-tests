@@ -36,9 +36,12 @@ def test_undefined_timestamp():
             timestamp_to_string(kws.get("timestamp"))
         )
 
-    ioc_pv, gateway_pv = conftest.get_pv_pair("HUGO:ENUM", auto_monitor=None)
-    ioc_pv.add_callback(on_change_ioc)
-    gateway_pv.add_callback(on_change_gateway)
+    ioc_pv, gateway_pv = conftest.get_pv_pair(
+        "HUGO:ENUM",
+        auto_monitor=None,
+        ioc_callback=on_change_ioc,
+        gateway_callback=on_change_gateway,
+    )
 
     ioc_value = ioc_pv.get()
     gateway_value = gateway_pv.get()

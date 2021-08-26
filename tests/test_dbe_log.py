@@ -21,7 +21,7 @@ def test_log_deadband():
     diff_inside_deadband = 0
     last_value = -99.9
 
-    def onChange(pvname=None, **kws):
+    def on_change(pvname=None, **kws):
         nonlocal events_received
         nonlocal last_value
         nonlocal diff_inside_deadband
@@ -35,8 +35,11 @@ def test_log_deadband():
         last_value = kws["value"]
 
     # gateway:passiveADEL has ADEL=10
-    ioc, gw = conftest.get_pv_pair("passiveADEL", auto_monitor=epics.dbr.DBE_LOG)
-    gw.add_callback(onChange)
+    ioc, gw = conftest.get_pv_pair(
+        "passiveADEL",
+        auto_monitor=epics.dbr.DBE_LOG,
+        gateway_callback=on_change
+    )
     ioc.get()
     gw.get()
     for val in range(35):

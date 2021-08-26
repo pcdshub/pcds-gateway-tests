@@ -21,9 +21,11 @@ import os
 import shutil
 import subprocess
 import time
+from concurrent.futures import ProcessPoolExecutor
 from typing import ContextManager, Optional
 
 import epics
+import pytest
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +197,7 @@ def local_channel_access(
         # process
         epics.ca.clear_cache()
         epics.ca.finalize_libca()
+        time.sleep(0.5)
 
 
 @contextlib.contextmanager
@@ -236,12 +239,72 @@ def get_pv_pair(
     pvname: str, *,
     ioc_prefix: str = "ioc:",
     gateway_prefix: str = "gateway:",
+    ioc_callback: Optional[callable] = None,
+    gateway_callback: Optional[callable] = None,
     **kwargs
 ) -> tuple[epics.PV, epics.PV]:
     """Get a PV pair - a direct PV and a gateway PV."""
     ioc_pv = epics.PV(ioc_prefix + pvname, **kwargs)
+    if ioc_callback is not None:
+        ioc_pv.add_callback(ioc_callback)
     ioc_pv.wait_for_connection()
 
     gateway_pv = epics.PV(gateway_prefix + pvname, **kwargs)
+    if gateway_callback is not None:
+        gateway_pv.add_callback(gateway_callback)
     gateway_pv.wait_for_connection()
     return (ioc_pv, gateway_pv)
+
+
+class GatewayStats:
+    vctotal: Optional[int] = None
+    pvtotal: Optional[int] = None
+    connected: Optional[int] = None
+    active: Optional[int] = None
+    inactive: Optional[int] = None
+
+    def __init__(self, prefix="gwtest:"):
+        self._vctotal = epics.ca.create_channel(f"{prefix}vctotal")
+        self._pvtotal = epics.ca.create_channel(f"{prefix}pvtotal")
+        self._connected = epics.ca.create_channel(f"{prefix}connected")
+        self._active = epics.ca.create_channel(f"{prefix}active")
+        self._inactive = epics.ca.create_channel(f"{prefix}inactive")
+        self.update()
+
+    def update(self):
+        """Update gateway statistics."""
+        self.vctotal = epics.ca.get(self._vctotal)
+        self.pvtotal = epics.ca.get(self._pvtotal)
+        self.connected = epics.ca.get(self._connected)
+        self.active = epics.ca.get(self._active)
+        self.inactive = epics.ca.get(self._inactive)
+
+
+def get_prop_support():
+    """Is DBE_PROPERTY supported?"""
+    events_received_ioc = 0
+
+    def on_change_ioc(**kwargs):
+        nonlocal events_received_ioc
+        events_received_ioc += 1
+
+    with standard_test_environment():
+        ioc = epics.PV("ioc:passive0", auto_monitor=epics.dbr.DBE_PROPERTY)
+        ioc.add_callback(on_change_ioc)
+        ioc.get()
+
+        pvhigh = epics.PV("ioc:passive0.HIGH", auto_monitor=None)
+        pvhigh.put(18.0, wait=True)
+        time.sleep(0.05)
+
+    return events_received_ioc == 2
+
+
+@pytest.fixture(scope="module")
+def prop_supported() -> bool:
+    """Is DBE_PROPERTY supported?"""
+    with ProcessPoolExecutor() as exec:
+        future = exec.submit(get_prop_support)
+
+    print("prop support?", future.result())
+    return future.result()
