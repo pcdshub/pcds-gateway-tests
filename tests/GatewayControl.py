@@ -1,22 +1,24 @@
 #!/usr/bin/env python
-'''Controls the CA Gateway'''
-import subprocess
+"""Controls the CA Gateway"""
 import atexit
-import time
 import os
+import subprocess
+import time
+
 import gwtests
+
 
 class GatewayControl:
     gatewayProcess = None
     DEVNULL = None
 
     def startGateway(self, extra_args=None):
-        '''
+        """
         Starts the CA Gateway
 
         Params:
             extra_args (str): Extra arguments passed to the gateway process
-        '''
+        """
         gateway_commands = [gwtests.gwExecutable]
         gateway_commands.extend(["-sip", "localhost", "-sport", str(gwtests.gwPort)])
         gateway_commands.extend(["-cip", "localhost", "-cport", str(gwtests.iocPort)])
@@ -27,16 +29,18 @@ class GatewayControl:
             gateway_commands.extend(extra_args.split(" "))
 
         if gwtests.verboseGateway:
-            gateway_commands.extend(["-debug", str(gwtests.gwDebug)]);
+            gateway_commands.extend(["-debug", str(gwtests.gwDebug)])
         if gwtests.verbose:
             print("Starting the CA Gateway using\n", " ".join(gateway_commands))
         if not gwtests.verboseGateway and not gwtests.verbose:
-            self.DEVNULL = open(os.devnull, 'wb')
-        self.gatewayProcess = subprocess.Popen(gateway_commands, stdout=self.DEVNULL, stderr=subprocess.STDOUT)
+            self.DEVNULL = open(os.devnull, "wb")
+        self.gatewayProcess = subprocess.Popen(
+            gateway_commands, stdout=self.DEVNULL, stderr=subprocess.STDOUT
+        )
         atexit.register(self.stop)
 
     def stop(self):
-        '''Stops the CA Gateway'''
+        """Stops the CA Gateway"""
         if self.gatewayProcess:
             self.gatewayProcess.terminate()
             self.gatewayProcess = None
@@ -49,7 +53,9 @@ class GatewayControl:
 
 if __name__ == "__main__":
     gwtests.setup()
-    print("Running the test CA Gateway in verbose mode for {0} seconds".format(gwtests.gwRunDuration))
+    print(
+        f"Running the test CA Gateway in verbose mode for {gwtests.gwRunDuration} seconds"
+    )
     gwtests.verbose = True
     gwtests.verboseGateway = True
     gatewayControl = GatewayControl()

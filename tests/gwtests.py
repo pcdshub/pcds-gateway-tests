@@ -1,13 +1,14 @@
 #!/usr/bin/env python
-'''CA Gateway test configuration'''
+"""CA Gateway test configuration"""
 
 import os
 import sys
+
 import epics
 
-os.environ['PYEPICS_LIBCA'] = os.path.join(
-    os.environ['EPICS_BASE'], 'lib',
-    os.environ['EPICS_HOST_ARCH'], 'libca.so' )
+os.environ["PYEPICS_LIBCA"] = os.path.join(
+    os.environ["EPICS_BASE"], "lib", os.environ["EPICS_HOST_ARCH"], "libca.so"
+)
 
 # Do we want verbose logging
 verbose = False
@@ -33,45 +34,51 @@ iocExecutable = "softIoc"
 gwExecutable = ""
 gwDebug = 10
 
+
 def setup():
-    '''Sets up test parameters for CA Gateway tests
-    '''
+    """Sets up test parameters for CA Gateway tests"""
     global verbose, verboseGateway, gwLocation, hostArch
     global iocExecutable, gwExecutable, gwDebug
 
-    if 'VERBOSE' in os.environ and os.environ['VERBOSE'].lower().startswith('y'):
+    if "VERBOSE" in os.environ and os.environ["VERBOSE"].lower().startswith("y"):
         verbose = True
 
-    if 'VERBOSE_GATEWAY' in os.environ:
+    if "VERBOSE_GATEWAY" in os.environ:
         verboseGateway = True
-        if os.environ['VERBOSE_GATEWAY'].isdigit():
-            gwDebug = os.environ['VERBOSE_GATEWAY']
+        if os.environ["VERBOSE_GATEWAY"].isdigit():
+            gwDebug = os.environ["VERBOSE_GATEWAY"]
 
-    if 'EPICS_HOST_ARCH' in os.environ:
-        hostArch = os.environ['EPICS_HOST_ARCH']
-    elif 'T_A' in os.environ:
-        hostArch = os.environ['T_A']
+    if "EPICS_HOST_ARCH" in os.environ:
+        hostArch = os.environ["EPICS_HOST_ARCH"]
+    elif "T_A" in os.environ:
+        hostArch = os.environ["T_A"]
     else:
-        print("Warning: EPICS_HOST_ARCH not set. Using default value of '{0}'".format(hostArch))
+        print(f"Warning: EPICS_HOST_ARCH not set. Using default value of '{hostArch}'")
 
-    if 'TOP' in os.environ:
-        gwLocation = os.path.join(os.environ['TOP'], '..')
+    if "TOP" in os.environ:
+        gwLocation = os.path.join(os.environ["TOP"], "..")
     else:
         print("Warning: TOP not set. Using default value of '..'")
 
-    gwExecutable = os.path.join(gwLocation, 'bin', hostArch, 'gateway')
+    gwExecutable = os.path.join(gwLocation, "bin", hostArch, "gateway")
     if not os.path.exists(gwExecutable):
         print("Cannot find the gateway executable at", gwExecutable)
         sys.exit(1)
 
-    if 'IOC_EPICS_BASE' in os.environ:
-        iocExecutable = os.path.join(os.environ['IOC_EPICS_BASE'], 'bin', hostArch, 'softIoc')
-    elif 'EPICS_BASE' in os.environ:
-        iocExecutable = os.path.join(os.environ['EPICS_BASE'], 'bin', hostArch, 'softIoc')
+    if "IOC_EPICS_BASE" in os.environ:
+        iocExecutable = os.path.join(
+            os.environ["IOC_EPICS_BASE"], "bin", hostArch, "softIoc"
+        )
+    elif "EPICS_BASE" in os.environ:
+        iocExecutable = os.path.join(
+            os.environ["EPICS_BASE"], "bin", hostArch, "softIoc"
+        )
     else:
-        print("Warning: IOC_EPICS_BASE or EPICS_BASE not set. Running 'softIoc' executable in PATH")
+        print(
+            "Warning: IOC_EPICS_BASE or EPICS_BASE not set. Running 'softIoc' executable in PATH"
+        )
 
     if verbose:
-        print("\ngwExecutable:  '{0}'".format(gwExecutable))
-        print("iocExecutable: '{0}'".format(iocExecutable))
-        print("libca: '{0}'".format(epics.ca.find_libca()))
+        print(f"\ngwExecutable:  '{gwExecutable}'")
+        print(f"iocExecutable: '{iocExecutable}'")
+        print(f"libca: '{epics.ca.find_libca()}'")
