@@ -3,6 +3,10 @@ PYTEST_OPTIONS ?=
 
 tests:
 	GATEWAY_ROOT=$(GATEWAY_ROOT) \
-		pytest -v test_enum_undefined_timestamp.py $(PYTEST_OPTIONS)
+		pytest -v \
+			$(PYTEST_OPTIONS) \
+			test_enum_undefined_timestamp.py \
+			test_dbe_alarm.py \
+			test_cs_studio.py
 
 .PHONY: tests
