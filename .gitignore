@@ -16,3 +16,6 @@ logs
 .vscode
 
 /tags
+
+gateway.killer
+gateway.restart
