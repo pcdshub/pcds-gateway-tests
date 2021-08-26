@@ -7,6 +7,7 @@ tests:
 			$(PYTEST_OPTIONS) \
 			test_enum_undefined_timestamp.py \
 			test_dbe_alarm.py \
+			test_dbe_log.py \
 			test_cs_studio.py
 
 .PHONY: tests

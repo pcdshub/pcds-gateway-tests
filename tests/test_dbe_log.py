@@ -1,65 +1,52 @@
 #!/usr/bin/env python
-import os
+import logging
 import time
-import unittest
 
+import conftest
 import epics
-import GatewayControl
-import gwtests
-import IOCControl
+
+logger = logging.getLogger(__name__)
 
 
-class TestDBELog(unittest.TestCase):
-    """Test log/archive updates (client using DBE_LOG flag) through the Gateway"""
+@conftest.standard_test_environment_decorator
+def test_log_deadband():
+    """
+    Test log/archive updates (client using DBE_LOG flag) through the Gateway.
 
-    def setUp(self):
-        gwtests.setup()
-        self.iocControl = IOCControl.IOCControl()
-        self.gatewayControl = GatewayControl.GatewayControl()
-        self.iocControl.startIOC()
-        self.gatewayControl.startGateway()
-        os.environ["EPICS_CA_AUTO_ADDR_LIST"] = "NO"
-        os.environ[
-            "EPICS_CA_ADDR_LIST"
-        ] = f"localhost:{gwtests.iocPort} localhost:{gwtests.gwPort}"
-        epics.ca.initialize_libca()
-        self.eventsReceived = 0
-        self.diffInsideDeadband = 0
-        self.lastValue = -99.9
+    DBE_LOG monitor on an ai with an ADEL - leaving the deadband generates
+    events.
+    """
 
-    def tearDown(self):
-        epics.ca.finalize_libca()
-        self.gatewayControl.stop()
-        self.iocControl.stop()
+    events_received = 0
+    diff_inside_deadband = 0
+    last_value = -99.9
 
-    def onChange(self, pvname=None, **kws):
-        self.eventsReceived += 1
-        if gwtests.verbose:
-            print(pvname, " changed to ", kws["value"], kws["severity"])
-        if (kws["value"] != 0.0) and (abs(self.lastValue - kws["value"]) <= 10.0):
-            self.diffInsideDeadband += 1
-        self.lastValue = kws["value"]
+    def onChange(pvname=None, **kws):
+        nonlocal events_received
+        nonlocal last_value
+        nonlocal diff_inside_deadband
 
-    def testLogDeadband(self):
-        """DBE_LOG monitor on an ai with an ADEL - leaving the deadband generates events."""
-        # gateway:passiveADEL has ADEL=10
-        ioc = epics.PV("ioc:passiveADEL", auto_monitor=epics.dbr.DBE_LOG)
-        gw = epics.PV("gateway:passiveADEL", auto_monitor=epics.dbr.DBE_LOG)
-        gw.add_callback(self.onChange)
-        ioc.get()
-        gw.get()
-        for val in range(35):
-            ioc.put(val, wait=True)
-        time.sleep(0.1)
-        # We get 5 events: at connection, first put, then at 11 22 33
-        assert self.eventsReceived == 5, "events expected: 5; events received: " + str(
-            self.eventsReceived
+        events_received += 1
+        logger.debug(
+            "%s changed to %s (%s)", pvname, kws["value"], kws["severity"]
         )
-        # Any updates inside deadband are an error
-        assert self.diffInsideDeadband == 0, (
-            str(self.diffInsideDeadband) + " events with change <= deadband received"
-        )
+        if (kws["value"] != 0.0) and (abs(last_value - kws["value"]) <= 10.0):
+            diff_inside_deadband += 1
+        last_value = kws["value"]
 
+    # gateway:passiveADEL has ADEL=10
+    ioc, gw = conftest.get_pv_pair("passiveADEL", auto_monitor=epics.dbr.DBE_LOG)
+    gw.add_callback(onChange)
+    ioc.get()
+    gw.get()
+    for val in range(35):
+        ioc.put(val, wait=True)
+    time.sleep(0.1)
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    # We get 5 events: at connection, first put, then at 11 22 33
+    assert events_received == 5, f"events expected: 5; events received: {events_received}"
+
+    # Any updates inside deadband are an error
+    assert diff_inside_deadband == 0, (
+        f"{diff_inside_deadband} events with change <= deadband received"
+    )
