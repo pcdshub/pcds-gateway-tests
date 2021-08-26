@@ -59,9 +59,7 @@ if "IOC_EPICS_BASE" in os.environ:
         os.environ["IOC_EPICS_BASE"], "bin", hostArch, "softIoc"
     )
 elif "EPICS_BASE" in os.environ:
-    iocExecutable = os.path.join(
-        os.environ["EPICS_BASE"], "bin", hostArch, "softIoc"
-    )
+    iocExecutable = os.path.join(os.environ["EPICS_BASE"], "bin", hostArch, "softIoc")
 else:
     iocExecutable = shutil.which("softIoc")
 

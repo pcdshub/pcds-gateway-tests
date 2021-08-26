@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 import os
-import subprocess
 import sys
 import time
 import unittest
 
-import epics
 import GatewayControl
 import gwtests
 import IOCControl
@@ -13,8 +11,10 @@ from epics import ca, dbr
 
 
 class TestStructures(unittest.TestCase):
-    """Testing structures going through the Gateway
-    Set up a connection directly and through the Gateway - change a property - check consistency of data
+    """
+    Testing structures going through the Gateway
+    Set up a connection directly and through the Gateway - change a property -
+    check consistency of data
     """
 
     def setUp(self):
@@ -71,21 +71,22 @@ class TestStructures(unittest.TestCase):
         "updates of CTRL structures are buggy in 3.14 PCAS",
     )
     def testCtrlStruct_ValueMonitor(self):
-        """Monitor PV (value events) through GW - change value and properties directly - check CTRL structure consistency"""
+        """
+        Monitor PV (value events) through GW - change value and properties
+        directly - check CTRL structure consistency
+        """
         diffs = []
 
         # gwcachetest is an ai record with full set of alarm limits: -100 -10 10 100
         gw = ca.create_channel("gateway:gwcachetest")
         connected = ca.connect_channel(gw, timeout=0.5)
-        self.assertTrue(
-            connected, "Could not connect to gateway channel " + ca.name(gw)
-        )
+        assert connected, "Could not connect to gateway channel " + ca.name(gw)
         (gw_cbref, gw_uaref, gw_eventid) = ca.create_subscription(
             gw, mask=dbr.DBE_VALUE, use_ctrl=True, callback=self.onChangeGW
         )
         ioc = ca.create_channel("ioc:gwcachetest")
         connected = ca.connect_channel(ioc, timeout=0.5)
-        self.assertTrue(connected, "Could not connect to ioc channel " + ca.name(ioc))
+        assert connected, "Could not connect to ioc channel " + ca.name(ioc)
         (ioc_cbref, ioc_uaref, ioc_eventid) = ca.create_subscription(
             ioc, mask=dbr.DBE_VALUE, use_ctrl=True, callback=self.onChangeIOC
         )
@@ -95,19 +96,17 @@ class TestStructures(unittest.TestCase):
         ca.put(ioc_value, 10.0, wait=True)
         time.sleep(0.1)
 
-        self.assertTrue(
-            self.eventsReceivedIOC == self.eventsReceivedGW,
-            "After setting value, no. of received updates differ: GW {}, IOC {}".format(
-                str(self.eventsReceivedGW), str(self.eventsReceivedIOC)
-            ),
+        assert (
+            self.eventsReceivedIOC == self.eventsReceivedGW
+        ), "After setting value, no. of received updates differ: GW {}, IOC {}".format(
+            str(self.eventsReceivedGW), str(self.eventsReceivedIOC)
         )
 
         (are_diff, diffs) = self.compareStructures()
-        self.assertTrue(
-            are_diff == False,
-            "At update {} (change value), received structure updates differ:\n\t{}".format(
-                str(self.eventsReceivedIOC), "\n\t".join(diffs)
-            ),
+        assert (
+            not are_diff
+        ), "At update {} (change value), received structure updates differ:\n\t{}".format(
+            str(self.eventsReceivedIOC), "\n\t".join(diffs)
         )
 
         # set property on IOC
@@ -116,19 +115,17 @@ class TestStructures(unittest.TestCase):
         ca.put(ioc_value, 11.0, wait=True)  # trigger update
         time.sleep(0.1)
 
-        self.assertTrue(
-            self.eventsReceivedIOC == self.eventsReceivedGW,
-            "After setting property, no. of received updates differ: GW {}, IOC {}".format(
-                str(self.eventsReceivedGW), str(self.eventsReceivedIOC)
-            ),
+        assert (
+            self.eventsReceivedIOC == self.eventsReceivedGW
+        ), "After setting property, no. of received updates differ: GW {}, IOC {}".format(
+            str(self.eventsReceivedGW), str(self.eventsReceivedIOC)
         )
 
         (are_diff, diffs) = self.compareStructures()
-        self.assertTrue(
-            are_diff == False,
-            "At update {} (change property), received structure updates differ:\n\t{}".format(
-                str(self.eventsReceivedIOC), "\n\t".join(diffs)
-            ),
+        assert (
+            are_diff
+        ), "At update {} (change property), received structure updates differ:\n\t{}".format(
+            str(self.eventsReceivedIOC), "\n\t".join(diffs)
         )
 
 

@@ -59,22 +59,18 @@ class TestEnumUndefinedTimestamp(unittest.TestCase):
         gwEnumValue = gwPV.get()
 
         # Verify timestamp and value match
-        self.assertTrue(
-            iocEnumValue == gwEnumValue,
-            f"ioc enum {iocEnumValue} !=\ngw enum {gwEnumValue}",
-        )
+        assert (
+            iocEnumValue == gwEnumValue
+        ), f"ioc enum {iocEnumValue} !=\ngw enum {gwEnumValue}"
 
         # Now get the gateway value again and make sure the timestamp is not undefined
         gwPV.get()
         if iocPV.status != epics.dbr.AlarmStatus.UDF:
-            self.assertTrue(
-                gwPV.status != epics.dbr.AlarmStatus.UDF, "2nd CA get is undefined!"
-            )
-        self.assertTrue(gwPV.timestamp != 0, "2nd CA get timestamp is undefined!")
-        self.assertTrue(
-            iocEnumValue == gwEnumValue,
-            f"ioc enum {iocEnumValue} !=\ngw enum {gwEnumValue}",
-        )
+            assert gwPV.status != epics.dbr.AlarmStatus.UDF, "2nd CA get is undefined!"
+        assert gwPV.timestamp != 0, "2nd CA get timestamp is undefined!"
+        assert (
+            iocEnumValue == gwEnumValue
+        ), f"ioc enum {iocEnumValue} !=\ngw enum {gwEnumValue}"
 
 
 if __name__ == "__main__":

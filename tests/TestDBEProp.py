@@ -10,7 +10,9 @@ import IOCControl
 
 
 class TestDBEProp(unittest.TestCase):
-    """Test property updates (client using DBE_PROPERTY flag) direct and through the Gateway"""
+    """
+    Test property updates (client using DBE_PROPERTY flag) direct and through the Gateway
+    """
 
     def setUp(self):
         gwtests.setup()
@@ -42,7 +44,10 @@ class TestDBEProp(unittest.TestCase):
             print("IOC update: ", pvname, " changed to ", kws["value"])
 
     def testPropAlarmLevels(self):
-        """DBE_PROPERTY monitor on an ai - value changes generate no events; property changes generate events."""
+        """
+        DBE_PROPERTY monitor on an ai - value changes generate no events;
+        property changes generate events.
+        """
         # gateway:passive0 is a blank ai record
         ioc = epics.PV("ioc:passive0", auto_monitor=epics.dbr.DBE_PROPERTY)
         ioc.add_callback(self.onChangeIOC)
@@ -59,13 +64,11 @@ class TestDBEProp(unittest.TestCase):
             ioc.put(val, wait=True)
         time.sleep(0.1)
         # We get 1 event: at connection
-        self.assertTrue(
-            self.eventsReceivedGW == 1,
-            "GW events expected: 1; received: " + str(self.eventsReceivedGW),
+        assert self.eventsReceivedGW == 1, "GW events expected: 1; received: " + str(
+            self.eventsReceivedGW
         )
-        self.assertTrue(
-            self.eventsReceivedIOC == 1,
-            "IOC events expected: 1; received: " + str(self.eventsReceivedIOC),
+        assert self.eventsReceivedIOC == 1, "IOC events expected: 1; received: " + str(
+            self.eventsReceivedIOC
         )
 
         self.eventsReceived = 0
@@ -77,9 +80,9 @@ class TestDBEProp(unittest.TestCase):
 
         # Depending on the IOC (supporting PROPERTY changes on limits or not) we get 0 or 4 events.
         # Pass test if updates from IOC act the same as updates from GW
-        self.assertTrue(
-            self.eventsReceivedGW == self.eventsReceivedIOC,
-            f"Expected equal number of updates; received {self.eventsReceivedGW} from GW and {self.eventsReceivedIOC} from IOC",
+        assert self.eventsReceivedGW == self.eventsReceivedIOC, (
+            f"Expected equal number of updates; received {self.eventsReceivedGW} "
+            f"from GW and {self.eventsReceivedIOC} from IOC"
         )
 
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import os
-import subprocess
 import time
 import unittest
 
@@ -12,8 +11,10 @@ from epics import ca, dbr
 
 
 class TestPropertyCache(unittest.TestCase):
-    """Testing the Gateway PV property cache
-    Set up a connection through the Gateway - change a property externally - check if Gateway cache was updated
+    """
+    Testing the Gateway PV property cache
+    Set up a connection through the Gateway - change a property externally -
+    check if Gateway cache was updated
     """
 
     def connectGwStats(self):
@@ -65,84 +66,73 @@ class TestPropertyCache(unittest.TestCase):
         self.eventsReceivedIOC += 1
 
     def onChange(self, pvname=None, **kws):
-        a = 1
+        ...
 
     def testPropCache_ValueMonitorCTRLget(self):
-        """Monitor PV (value events) through GW - change properties (HIGH, EGU) directly - get the DBR_CTRL of the PV through GW"""
+        """
+        Monitor PV (value events) through GW - change properties (HIGH, EGU)
+        directly - get the DBR_CTRL of the PV through GW
+        """
         # gateway should show no VC (client side connection) and no PV (IOC side connection)
         self.updateGwStats()
-        self.assertTrue(
-            self.vctotal == 0,
-            "Expected GW VC total count: 0, actual: " + str(self.vctotal),
+        assert self.vctotal == 0, "Expected GW VC total count: 0, actual: " + str(
+            self.vctotal
         )
-        self.assertTrue(
-            self.pvtotal == 0,
-            "Expected GW PV total count: 0, actual: " + str(self.pvtotal),
+        assert self.pvtotal == 0, "Expected GW PV total count: 0, actual: " + str(
+            self.pvtotal
         )
-        self.assertTrue(
-            self.connected == 0,
-            "Expected GW connected PV count: 0, actual: " + str(self.connected),
+        assert self.connected == 0, "Expected GW connected PV count: 0, actual: " + str(
+            self.connected
         )
-        self.assertTrue(
-            self.active == 0,
-            "Expected GW active PV count: 0, actual: " + str(self.active),
+        assert self.active == 0, "Expected GW active PV count: 0, actual: " + str(
+            self.active
         )
-        self.assertTrue(
-            self.inactive == 0,
-            "Expected GW inactive PV count: 0, actual: " + str(self.inactive),
+        assert self.inactive == 0, "Expected GW inactive PV count: 0, actual: " + str(
+            self.inactive
         )
 
         # gwcachetest is an ai record with full set of alarm limits: -100 -10 10 100
         gw = ca.create_channel("gateway:gwcachetest")
         connected = ca.connect_channel(gw, timeout=0.5)
-        self.assertTrue(
-            connected, "Could not connect to gateway channel " + ca.name(gw)
-        )
+        assert connected, "Could not connect to gateway channel " + ca.name(gw)
         (gw_cbref, gw_uaref, gw_eventid) = ca.create_subscription(
             gw, mask=dbr.DBE_VALUE, callback=self.onChange
         )
         ioc = ca.create_channel("ioc:gwcachetest")
         connected = ca.connect_channel(ioc, timeout=0.5)
-        self.assertTrue(connected, "Could not connect to ioc channel " + ca.name(ioc))
+        assert connected, "Could not connect to ioc channel " + ca.name(ioc)
         (ioc_cbref, ioc_uaref, ioc_eventid) = ca.create_subscription(
             ioc, mask=dbr.DBE_VALUE, callback=self.onChange
         )
 
         # gateway should show one VC and one connected active PV
         self.updateGwStats()
-        self.assertTrue(
-            self.vctotal == 1,
-            "Expected GW VC total count: 1, actual: " + str(self.vctotal),
+        assert self.vctotal == 1, "Expected GW VC total count: 1, actual: " + str(
+            self.vctotal
         )
-        self.assertTrue(
-            self.pvtotal == 1,
-            "Expected GW PV total count: 1, actual: " + str(self.pvtotal),
+        assert self.pvtotal == 1, "Expected GW PV total count: 1, actual: " + str(
+            self.pvtotal
         )
-        self.assertTrue(
-            self.connected == 1,
-            "Expected GW connected PV count: 1, actual: " + str(self.connected),
+        assert self.connected == 1, "Expected GW connected PV count: 1, actual: " + str(
+            self.connected
         )
-        self.assertTrue(
-            self.active == 1,
-            "Expected GW active PV count: 1, actual: " + str(self.active),
+        assert self.active == 1, "Expected GW active PV count: 1, actual: " + str(
+            self.active
         )
-        self.assertTrue(
-            self.inactive == 0,
-            "Expected GW inactive PV count: 0, actual: " + str(self.inactive),
+        assert self.inactive == 0, "Expected GW inactive PV count: 0, actual: " + str(
+            self.inactive
         )
 
         # limit should not have been updated
         ioc_ctrl = ca.get_ctrlvars(ioc)
         highVal = ioc_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == 10.0,
-            "Expected IOC warning_limit: 10; actual limit: " + str(highVal),
+        assert highVal == 10.0, "Expected IOC warning_limit: 10; actual limit: " + str(
+            highVal
         )
         gw_ctrl = ca.get_ctrlvars(gw)
         highVal = gw_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == 10.0,
-            "Expected GW warning_limit: 10; actual limit: " + str(highVal),
+        assert highVal == 10.0, "Expected GW warning_limit: 10; actual limit: " + str(
+            highVal
         )
 
         # set warning limit on IOC
@@ -153,9 +143,8 @@ class TestPropertyCache(unittest.TestCase):
         # Now the limit should have been updated (if IOC supports DBE_PROPERTY)
         ioc_ctrl = ca.get_ctrlvars(ioc)
         highVal = ioc_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == 20.0,
-            "Expected IOC warning_limit: 20; actual limit: " + str(highVal),
+        assert highVal == 20.0, "Expected IOC warning_limit: 20; actual limit: " + str(
+            highVal
         )
         if self.propSupported:
             gw_expected = 20.0
@@ -163,10 +152,9 @@ class TestPropertyCache(unittest.TestCase):
             gw_expected = 10.0
         gw_ctrl = ca.get_ctrlvars(gw)
         highVal = gw_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == gw_expected,
-            f"Expected GW warning_limit: {gw_expected}; actual limit: {highVal}",
-        )
+        assert (
+            highVal == gw_expected
+        ), f"Expected GW warning_limit: {gw_expected}; actual limit: {highVal}"
 
         # set unit string on IOC
         ioc_egu = ca.create_channel("ioc:gwcachetest.EGU")
@@ -177,9 +165,8 @@ class TestPropertyCache(unittest.TestCase):
         # Now the unit string should have been updated (if IOC supports DBE_PROPERTY)
         ioc_ctrl = ca.get_ctrlvars(ioc)
         eguVal = ioc_ctrl["units"]
-        self.assertTrue(
-            eguVal == "foo",
-            "Expected IOC units string: foo; actual units string: " + eguVal,
+        assert eguVal == "foo", (
+            "Expected IOC units string: foo; actual units string: " + eguVal
         )
         if self.propSupported:
             gw_expected = "foo"
@@ -187,81 +174,69 @@ class TestPropertyCache(unittest.TestCase):
             gw_expected = old_egu
         gw_ctrl = ca.get_ctrlvars(gw)
         eguVal = gw_ctrl["units"]
-        self.assertTrue(
-            eguVal == gw_expected,
-            f"Expected GW units string: {gw_expected}; actual units string: {eguVal}",
-        )
+        assert (
+            eguVal == gw_expected
+        ), f"Expected GW units string: {gw_expected}; actual units string: {eguVal}"
 
     def testPropCache_ValueGetCTRLGet(self):
-        """Get PV (value) through GW - change properties (HIGH, EGU) directly - get the DBR_CTRL of the PV through GW"""
+        """
+        Get PV (value) through GW - change properties (HIGH, EGU) directly -
+        get the DBR_CTRL of the PV through GW
+        """
         # gateway should show no VC (client side connection) and no PV (IOC side connection)
         self.updateGwStats()
-        self.assertTrue(
-            self.vctotal == 0,
-            "Expected GW VC total count: 0, actual: " + str(self.vctotal),
+        assert self.vctotal == 0, "Expected GW VC total count: 0, actual: " + str(
+            self.vctotal
         )
-        self.assertTrue(
-            self.pvtotal == 0,
-            "Expected GW PV total count: 0, actual: " + str(self.pvtotal),
+        assert self.pvtotal == 0, "Expected GW PV total count: 0, actual: " + str(
+            self.pvtotal
         )
-        self.assertTrue(
-            self.connected == 0,
-            "Expected GW connected PV count: 0, actual: " + str(self.connected),
+        assert self.connected == 0, "Expected GW connected PV count: 0, actual: " + str(
+            self.connected
         )
-        self.assertTrue(
-            self.active == 0,
-            "Expected GW active PV count: 0, actual: " + str(self.active),
+        assert self.active == 0, "Expected GW active PV count: 0, actual: " + str(
+            self.active
         )
-        self.assertTrue(
-            self.inactive == 0,
-            "Expected GW inactive PV count: 0, actual: " + str(self.inactive),
+        assert self.inactive == 0, "Expected GW inactive PV count: 0, actual: " + str(
+            self.inactive
         )
 
         # gwcachetest is an ai record with full set of alarm limits: -100 -10 10 100
         gw = ca.create_channel("gateway:gwcachetest")
         connected = ca.connect_channel(gw, timeout=0.5)
-        self.assertTrue(
-            connected, "Could not connect to gateway channel " + ca.name(gw)
-        )
+        assert connected, "Could not connect to gateway channel " + ca.name(gw)
         ioc = ca.create_channel("ioc:gwcachetest")
         connected = ca.connect_channel(ioc, timeout=0.5)
-        self.assertTrue(connected, "Could not connect to ioc channel " + ca.name(gw))
+        assert connected, "Could not connect to ioc channel " + ca.name(gw)
 
         # gateway should show one VC and one connected active PV
         self.updateGwStats()
-        self.assertTrue(
-            self.vctotal == 1,
-            "Expected GW VC total count: 1, actual: " + str(self.vctotal),
+        assert self.vctotal == 1, "Expected GW VC total count: 1, actual: " + str(
+            self.vctotal
         )
-        self.assertTrue(
-            self.pvtotal == 1,
-            "Expected GW PV total count: 1, actual: " + str(self.pvtotal),
+        assert self.pvtotal == 1, "Expected GW PV total count: 1, actual: " + str(
+            self.pvtotal
         )
-        self.assertTrue(
-            self.connected == 1,
-            "Expected GW connected PV count: 1, actual: " + str(self.connected),
+        assert self.connected == 1, "Expected GW connected PV count: 1, actual: " + str(
+            self.connected
         )
-        self.assertTrue(
-            self.active == 1,
-            "Expected GW active PV count: 1, actual: " + str(self.active),
+        assert self.active == 1, "Expected GW active PV count: 1, actual: " + str(
+            self.active
         )
-        self.assertTrue(
-            self.inactive == 0,
-            "Expected GW inactive PV count: 0, actual: " + str(self.inactive),
+        assert self.inactive == 0, "Expected GW inactive PV count: 0, actual: " + str(
+            self.inactive
         )
 
         # limit should not have been updated
         ioc_ctrl = ca.get_ctrlvars(ioc)
         highVal = ioc_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == 10.0,
-            "Expected IOC warning_limit: 10; actual limit: " + str(highVal),
+        assert highVal == 10.0, "Expected IOC warning_limit: 10; actual limit: " + str(
+            highVal
         )
         gw_ctrl = ca.get_ctrlvars(gw)
         highVal = gw_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == 10.0,
-            "Expected GW warning_limit: 10; actual limit: " + str(highVal),
+        assert highVal == 10.0, "Expected GW warning_limit: 10; actual limit: " + str(
+            highVal
         )
 
         # set warning limit on IOC
@@ -272,9 +247,8 @@ class TestPropertyCache(unittest.TestCase):
         # Now the limit should have been updated (if IOC supports DBE_PROPERTY)
         ioc_ctrl = ca.get_ctrlvars(ioc)
         highVal = ioc_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == 20.0,
-            "Expected IOC warning_limit: 20; actual limit: " + str(highVal),
+        assert highVal == 20.0, "Expected IOC warning_limit: 20; actual limit: " + str(
+            highVal
         )
         if self.propSupported:
             gw_expected = 20.0
@@ -282,10 +256,9 @@ class TestPropertyCache(unittest.TestCase):
             gw_expected = 10.0
         gw_ctrl = ca.get_ctrlvars(gw)
         highVal = gw_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == gw_expected,
-            f"Expected GW warning_limit: {gw_expected}; actual limit: {highVal}",
-        )
+        assert (
+            highVal == gw_expected
+        ), f"Expected GW warning_limit: {gw_expected}; actual limit: {highVal}"
 
         # set unit string on IOC
         ioc_egu = ca.create_channel("ioc:gwcachetest.EGU")
@@ -296,9 +269,8 @@ class TestPropertyCache(unittest.TestCase):
         # Now the unit string should have been updated (if IOC supports DBE_PROPERTY)
         ioc_ctrl = ca.get_ctrlvars(ioc)
         eguVal = ioc_ctrl["units"]
-        self.assertTrue(
-            eguVal == "foo",
-            "Expected IOC units string: foo; actual units string: " + eguVal,
+        assert eguVal == "foo", (
+            "Expected IOC units string: foo; actual units string: " + eguVal
         )
         if self.propSupported:
             gw_expected = "foo"
@@ -306,91 +278,77 @@ class TestPropertyCache(unittest.TestCase):
             gw_expected = old_egu
         gw_ctrl = ca.get_ctrlvars(gw)
         eguVal = gw_ctrl["units"]
-        self.assertTrue(
-            eguVal == gw_expected,
-            f"Expected GW units string: {gw_expected}; actual units string: {eguVal}",
-        )
+        assert (
+            eguVal == gw_expected
+        ), f"Expected GW units string: {gw_expected}; actual units string: {eguVal}"
 
     def testPropCache_ValueGetDisconnectCTRLGet(self):
-        """Get PV (value) through GW - disconnect client - change properties (HIGH, EGU) directly - get the DBR_CTRL of the PV through GW"""
+        """
+        Get PV (value) through GW - disconnect client - change properties
+        (HIGH, EGU) directly - get the DBR_CTRL of the PV through GW
+        """
         # gateway should show no VC (client side connection) and no PV (IOC side connection)
         self.updateGwStats()
-        self.assertTrue(
-            self.vctotal == 0,
-            "Expected GW VC total count: 0, actual: " + str(self.vctotal),
+        assert self.vctotal == 0, "Expected GW VC total count: 0, actual: " + str(
+            self.vctotal
         )
-        self.assertTrue(
-            self.pvtotal == 0,
-            "Expected GW PV total count: 0, actual: " + str(self.pvtotal),
+        assert self.pvtotal == 0, "Expected GW PV total count: 0, actual: " + str(
+            self.pvtotal
         )
-        self.assertTrue(
-            self.connected == 0,
-            "Expected GW connected PV count: 0, actual: " + str(self.connected),
+        assert self.connected == 0, "Expected GW connected PV count: 0, actual: " + str(
+            self.connected
         )
-        self.assertTrue(
-            self.active == 0,
-            "Expected GW active PV count: 0, actual: " + str(self.active),
+        assert self.active == 0, "Expected GW active PV count: 0, actual: " + str(
+            self.active
         )
-        self.assertTrue(
-            self.inactive == 0,
-            "Expected GW inactive PV count: 0, actual: " + str(self.inactive),
+        assert self.inactive == 0, "Expected GW inactive PV count: 0, actual: " + str(
+            self.inactive
         )
 
         # gwcachetest is an ai record with full set of alarm limits: -100 -10 10 100
         gw = ca.create_channel("gateway:gwcachetest")
         connected = ca.connect_channel(gw, timeout=0.5)
-        self.assertTrue(
-            connected, "Could not connect to gateway channel " + ca.name(gw)
-        )
+        assert connected, "Could not connect to gateway channel " + ca.name(gw)
         ioc = ca.create_channel("ioc:gwcachetest")
         connected = ca.connect_channel(ioc, timeout=0.5)
-        self.assertTrue(connected, "Could not connect to ioc channel " + ca.name(gw))
+        assert connected, "Could not connect to ioc channel " + ca.name(gw)
 
         # gateway should show one VC and one connected active PV
         self.updateGwStats()
-        self.assertTrue(
-            self.vctotal == 1,
-            "Expected GW VC total count: 1, actual: " + str(self.vctotal),
+        assert self.vctotal == 1, "Expected GW VC total count: 1, actual: " + str(
+            self.vctotal
         )
-        self.assertTrue(
-            self.pvtotal == 1,
-            "Expected GW PV total count: 1, actual: " + str(self.pvtotal),
+        assert self.pvtotal == 1, "Expected GW PV total count: 1, actual: " + str(
+            self.pvtotal
         )
-        self.assertTrue(
-            self.connected == 1,
-            "Expected GW connected PV count: 1, actual: " + str(self.connected),
+        assert self.connected == 1, "Expected GW connected PV count: 1, actual: " + str(
+            self.connected
         )
-        self.assertTrue(
-            self.active == 1,
-            "Expected GW active PV count: 1, actual: " + str(self.active),
+        assert self.active == 1, "Expected GW active PV count: 1, actual: " + str(
+            self.active
         )
-        self.assertTrue(
-            self.inactive == 0,
-            "Expected GW inactive PV count: 0, actual: " + str(self.inactive),
+        assert self.inactive == 0, "Expected GW inactive PV count: 0, actual: " + str(
+            self.inactive
         )
 
         # limit should not have been updated
         ioc_ctrl = ca.get_ctrlvars(ioc)
         highVal = ioc_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == 10.0,
-            "Expected IOC warning_limit: 10; actual limit: " + str(highVal),
+        assert highVal == 10.0, "Expected IOC warning_limit: 10; actual limit: " + str(
+            highVal
         )
         eguVal = ioc_ctrl["units"]
-        self.assertTrue(
-            eguVal == "wobbles",
-            "Expected IOC units string: wobbles; actual units string: " + eguVal,
+        assert eguVal == "wobbles", (
+            "Expected IOC units string: wobbles; actual units string: " + eguVal
         )
         gw_ctrl = ca.get_ctrlvars(gw)
         highVal = gw_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == 10.0,
-            "Expected GW warning_limit: 10; actual limit: " + str(highVal),
+        assert highVal == 10.0, "Expected GW warning_limit: 10; actual limit: " + str(
+            highVal
         )
         eguVal = gw_ctrl["units"]
-        self.assertTrue(
-            eguVal == "wobbles",
-            "Expected GW units string: wobbles; actual units string: " + eguVal,
+        assert eguVal == "wobbles", (
+            "Expected GW units string: wobbles; actual units string: " + eguVal
         )
 
         # disconnect Channel Access, reconnect Gateway stats
@@ -400,25 +358,20 @@ class TestPropertyCache(unittest.TestCase):
 
         # gateway should show no VC and 1 connected inactive PV
         self.updateGwStats()
-        self.assertTrue(
-            self.vctotal == 0,
-            "Expected GW VC total count: 0, actual: " + str(self.vctotal),
+        assert self.vctotal == 0, "Expected GW VC total count: 0, actual: " + str(
+            self.vctotal
         )
-        self.assertTrue(
-            self.pvtotal == 1,
-            "Expected GW PV total count: 1, actual: " + str(self.pvtotal),
+        assert self.pvtotal == 1, "Expected GW PV total count: 1, actual: " + str(
+            self.pvtotal
         )
-        self.assertTrue(
-            self.connected == 1,
-            "Expected GW connected PV count: 1, actual: " + str(self.connected),
+        assert self.connected == 1, "Expected GW connected PV count: 1, actual: " + str(
+            self.connected
         )
-        self.assertTrue(
-            self.active == 0,
-            "Expected GW active PV count: 0, actual: " + str(self.active),
+        assert self.active == 0, "Expected GW active PV count: 0, actual: " + str(
+            self.active
         )
-        self.assertTrue(
-            self.inactive == 1,
-            "Expected GW inactive PV count: 1, actual: " + str(self.inactive),
+        assert self.inactive == 1, "Expected GW inactive PV count: 1, actual: " + str(
+            self.inactive
         )
 
         # set warning limit on IOC
@@ -432,58 +385,47 @@ class TestPropertyCache(unittest.TestCase):
         # reconnect Gateway and IOC
         gw = ca.create_channel("gateway:gwcachetest")
         connected = ca.connect_channel(gw, timeout=0.5)
-        self.assertTrue(
-            connected, "Could not connect to gateway channel " + ca.name(gw)
-        )
+        assert connected, "Could not connect to gateway channel " + ca.name(gw)
         ioc = ca.create_channel("ioc:gwcachetest")
         connected = ca.connect_channel(ioc, timeout=0.5)
-        self.assertTrue(connected, "Could not connect to ioc channel " + ca.name(gw))
+        assert connected, "Could not connect to ioc channel " + ca.name(gw)
 
         # gateway should show one VC and one connected active PV
         self.updateGwStats()
-        self.assertTrue(
-            self.vctotal == 1,
-            "Expected GW VC total count: 1, actual: " + str(self.vctotal),
+        assert self.vctotal == 1, "Expected GW VC total count: 1, actual: " + str(
+            self.vctotal
         )
-        self.assertTrue(
-            self.pvtotal == 1,
-            "Expected GW PV total count: 1, actual: " + str(self.pvtotal),
+        assert self.pvtotal == 1, "Expected GW PV total count: 1, actual: " + str(
+            self.pvtotal
         )
-        self.assertTrue(
-            self.connected == 1,
-            "Expected GW connected PV count: 1, actual: " + str(self.connected),
+        assert self.connected == 1, "Expected GW connected PV count: 1, actual: " + str(
+            self.connected
         )
-        self.assertTrue(
-            self.active == 1,
-            "Expected GW active PV count: 1, actual: " + str(self.active),
+        assert self.active == 1, "Expected GW active PV count: 1, actual: " + str(
+            self.active
         )
-        self.assertTrue(
-            self.inactive == 0,
-            "Expected GW inactive PV count: 0, actual: " + str(self.inactive),
+        assert self.inactive == 0, "Expected GW inactive PV count: 0, actual: " + str(
+            self.inactive
         )
 
         # now the limit should have been updated
         ioc_ctrl = ca.get_ctrlvars(ioc)
         highVal = ioc_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == 20.0,
-            "Expected IOC warning_limit: 20; actual limit: " + str(highVal),
+        assert highVal == 20.0, "Expected IOC warning_limit: 20; actual limit: " + str(
+            highVal
         )
         eguVal = ioc_ctrl["units"]
-        self.assertTrue(
-            eguVal == "foo",
-            "Expected IOC units string: foo; actual units string: " + eguVal,
+        assert eguVal == "foo", (
+            "Expected IOC units string: foo; actual units string: " + eguVal
         )
         gw_ctrl = ca.get_ctrlvars(gw)
         highVal = gw_ctrl["upper_warning_limit"]
-        self.assertTrue(
-            highVal == 20.0,
-            "Expected GW warning_limit: 20; actual limit: " + str(highVal),
+        assert highVal == 20.0, "Expected GW warning_limit: 20; actual limit: " + str(
+            highVal
         )
         eguVal = gw_ctrl["units"]
-        self.assertTrue(
-            eguVal == "foo",
-            "Expected GW units string: wobbles; actual units string: " + eguVal,
+        assert eguVal == "foo", (
+            "Expected GW units string: wobbles; actual units string: " + eguVal
         )
 
 

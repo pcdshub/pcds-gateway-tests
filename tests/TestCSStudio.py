@@ -69,7 +69,10 @@ class TestCSStudio(unittest.TestCase):
         return are_diff, diffs
 
     def testCSStudio_ValueAndPropMonitor(self):
-        """Monitor PV (imitating CS-Studio) through GW - change value and properties directly - check CTRL structure consistency"""
+        """
+        Monitor PV (imitating CS-Studio) through GW - change value and
+        properties directly - check CTRL structure consistency
+        """
         diffs = []
 
         if gwtests.verbose:
@@ -77,9 +80,7 @@ class TestCSStudio(unittest.TestCase):
         # gwcachetest is an ai record with full set of alarm limits: -100 -10 10 100
         gw = ca.create_channel("gateway:gwcachetest")
         connected = ca.connect_channel(gw, timeout=0.5)
-        self.assertTrue(
-            connected, "Could not connect to gateway channel " + ca.name(gw)
-        )
+        assert connected, "Could not connect to gateway channel " + ca.name(gw)
         (gw_cbref, gw_uaref, gw_eventid) = ca.create_subscription(
             gw,
             mask=dbr.DBE_VALUE | dbr.DBE_ALARM,
@@ -91,7 +92,7 @@ class TestCSStudio(unittest.TestCase):
         )
         ioc = ca.create_channel("ioc:gwcachetest")
         connected = ca.connect_channel(ioc, timeout=0.5)
-        self.assertTrue(connected, "Could not connect to ioc channel " + ca.name(ioc))
+        assert connected, "Could not connect to ioc channel " + ca.name(ioc)
         (ioc_cbref, ioc_uaref, ioc_eventid) = ca.create_subscription(
             ioc,
             mask=dbr.DBE_VALUE | dbr.DBE_ALARM,
@@ -111,19 +112,17 @@ class TestCSStudio(unittest.TestCase):
         if gwtests.verbose:
             print()
 
-        self.assertTrue(
-            self.eventsReceivedIOC == self.eventsReceivedGW,
-            "After setting value, no. of received updates differ: GW {}, IOC {}".format(
-                str(self.eventsReceivedGW), str(self.eventsReceivedIOC)
-            ),
+        assert (
+            self.eventsReceivedIOC == self.eventsReceivedGW
+        ), "After setting value, no. of received updates differ: GW {}, IOC {}".format(
+            str(self.eventsReceivedGW), str(self.eventsReceivedIOC)
         )
 
         (are_diff, diffs) = self.compareStructures()
-        self.assertTrue(
-            are_diff == False,
-            "At update {} (change value), received structure updates differ:\n\t{}".format(
-                str(self.eventsReceivedIOC), "\n\t".join(diffs)
-            ),
+        assert (
+            not are_diff
+        ), "At update {} (change value), received structure updates differ:\n\t{}".format(
+            str(self.eventsReceivedIOC), "\n\t".join(diffs)
         )
 
         # set property on IOC
@@ -137,19 +136,17 @@ class TestCSStudio(unittest.TestCase):
         if gwtests.verbose:
             print()
 
-        self.assertTrue(
-            self.eventsReceivedIOC == self.eventsReceivedGW,
-            "After setting property, no. of received updates differ: GW {}, IOC {}".format(
-                str(self.eventsReceivedGW), str(self.eventsReceivedIOC)
-            ),
+        assert (
+            self.eventsReceivedIOC == self.eventsReceivedGW
+        ), "After setting property, no. of received updates differ: GW {}, IOC {}".format(
+            str(self.eventsReceivedGW), str(self.eventsReceivedIOC)
         )
 
         (are_diff, diffs) = self.compareStructures()
-        self.assertTrue(
-            are_diff == False,
-            "At update {} (change property), received structure updates differ:\n\t{}".format(
-                str(self.eventsReceivedIOC), "\n\t".join(diffs)
-            ),
+        assert (
+            not are_diff
+        ), "At update {} (change property), received structure updates differ:\n\t{}".format(
+            str(self.eventsReceivedIOC), "\n\t".join(diffs)
         )
 
 

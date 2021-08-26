@@ -49,10 +49,9 @@ class TestDBEValue(unittest.TestCase):
         time.sleep(0.1)
 
         # We get 11 events: at connection, then at 10 value changes (puts)
-        self.assertTrue(
-            self.eventsReceived == 11,
-            "events expected: 11; events received: " + str(self.eventsReceived),
-        )
+        assert (
+            self.eventsReceived == 11
+        ), "events expected: 11; events received: " + str(self.eventsReceived)
 
 
 if __name__ == "__main__":

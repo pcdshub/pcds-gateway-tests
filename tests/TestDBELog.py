@@ -52,14 +52,12 @@ class TestDBELog(unittest.TestCase):
             ioc.put(val, wait=True)
         time.sleep(0.1)
         # We get 5 events: at connection, first put, then at 11 22 33
-        self.assertTrue(
-            self.eventsReceived == 5,
-            "events expected: 5; events received: " + str(self.eventsReceived),
+        assert self.eventsReceived == 5, "events expected: 5; events received: " + str(
+            self.eventsReceived
         )
         # Any updates inside deadband are an error
-        self.assertTrue(
-            self.diffInsideDeadband == 0,
-            str(self.diffInsideDeadband) + " events with change <= deadband received",
+        assert self.diffInsideDeadband == 0, (
+            str(self.diffInsideDeadband) + " events with change <= deadband received"
         )
 
 

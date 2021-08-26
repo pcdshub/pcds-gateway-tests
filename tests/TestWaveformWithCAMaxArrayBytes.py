@@ -53,11 +53,9 @@ class TestWaveformWithCAMaxArrayBytes(unittest.TestCase):
             caput("gateway:passive0", put_value, wait=True)
             result = caget("gateway:passive0")
 
-            self.assertIsNotNone(result)
-            self.assertEqual(
-                result,
-                put_value,
-                msg="Initial get: got {} expected {}".format(result, put_value),
+            assert result is not None
+            assert result == put_value, "Initial get: got {} expected {}".format(
+                result, put_value
             )
 
             # Then try to get waveform through gateway

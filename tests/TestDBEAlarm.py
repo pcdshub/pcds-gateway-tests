@@ -41,7 +41,10 @@ class TestDBEAlarm(unittest.TestCase):
         self.lastSeverity = kws["severity"]
 
     def testAlarmLevel(self):
-        """DBE_ALARM monitor on an ai with two alarm levels - crossing the level generates updates"""
+        """
+        DBE_ALARM monitor on an ai with two alarm levels - crossing the level
+        generates updates
+        """
         # gateway:passiveALRM has HIGH=5 (MINOR) and HIHI=10 (MAJOR)
         ioc = epics.PV("ioc:passiveALRM", auto_monitor=epics.dbr.DBE_ALARM)
         gw = epics.PV("gateway:passiveALRM", auto_monitor=epics.dbr.DBE_ALARM)
@@ -53,15 +56,13 @@ class TestDBEAlarm(unittest.TestCase):
         time.sleep(0.1)
         # We get 6 events: at connection (INVALID), at first write (NO_ALARM),
         # and at the level crossings MINOR-MAJOR-MINOR-NO_ALARM.
-        self.assertTrue(
-            self.eventsReceived == 6,
-            "events expected: 6; events received: " + str(self.eventsReceived),
-        )
+        assert (
+            self.eventsReceived == 6
+        ), f"events expected: 6; events received: {self.eventsReceived}"
         # Any updates with unchanged severity are an error
-        self.assertTrue(
-            self.severityUnchanged == 0,
-            str(self.severityUnchanged) + " events with no severity changes received",
-        )
+        assert (
+            self.severityUnchanged == 0
+        ), f"{self.severityUnchanged} events with no severity changes received"
 
 
 if __name__ == "__main__":
