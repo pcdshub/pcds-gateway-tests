@@ -230,3 +230,18 @@ def standard_test_environment_decorator(
         return wrapper(func)
 
     return wrapper
+
+
+def get_pv_pair(
+    pvname: str, *,
+    ioc_prefix: str = "ioc:",
+    gateway_prefix: str = "gateway:",
+    **kwargs
+) -> tuple[epics.PV, epics.PV]:
+    """Get a PV pair - a direct PV and a gateway PV."""
+    ioc_pv = epics.PV(ioc_prefix + pvname, **kwargs)
+    ioc_pv.wait_for_connection()
+
+    gateway_pv = epics.PV(gateway_prefix + pvname, **kwargs)
+    gateway_pv.wait_for_connection()
+    return (ioc_pv, gateway_pv)
