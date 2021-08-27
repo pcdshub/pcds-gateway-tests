@@ -58,6 +58,7 @@ def check_permissions(
     pvlist_contents = with_pvlist_header(pvlist_contents)
     with conftest.custom_environment(access_contents, pvlist_contents):
         for access_check in access_checks:
+            logger.info("Testing %s", access_check)
             result = util.caget_from_host(
                 access_check.hostname, access_check.pvname,
                 username=access_check.username
@@ -114,7 +115,7 @@ def check_permissions(
         ),
     ],
 )
-def test_permissions_by_host(
+def test_permissions_by_host_aliased(
     access_contents: str, pvlist_contents: str, access_checks: list[AccessCheck]
 ):
     check_permissions(access_contents, pvlist_contents, access_checks)
@@ -162,7 +163,72 @@ def test_permissions_by_host(
         ),
     ],
 )
-def test_permissions_by_user(
+def test_permissions_by_user_aliased(
     access_contents: str, pvlist_contents: str, access_checks: list[AccessCheck]
 ):
     check_permissions(access_contents, pvlist_contents, access_checks)
+
+
+@have_requirements
+@pytest.mark.parametrize(
+    "access_contents",
+    [
+        pytest.param(
+            """\
+            HAG(mfxhosts) {mfx-control,mfx-console}
+            ASG(DEFAULT) {
+                RULE(1,READ)
+            }
+
+            ASG(RWMFX) {
+                RULE(1,READ)
+                RULE(1,WRITE,TRAPWRITE){
+                  HAG(mfxhosts)
+                }
+            }
+            """,
+            id="minimal",
+        ),
+        pytest.param(
+            full_access_rights,
+            id="full",
+            marks=pytest.mark.skipif(
+                not full_access_rights, reason="Full access rights file missing?"
+            )
+        ),
+    ]
+)
+@pytest.mark.parametrize(
+    "pvlist_contents, access_checks",
+    [
+        pytest.param(
+            """
+            EVALUATION ORDER ALLOW, DENY
+            ioc:HUGO:ENUM  ALLOW RWMFX
+            ioc:HUGO:AI    ALLOW
+            """,
+            [
+                AccessCheck("mfx-control", "ioc:HUGO:ENUM", "WRITE|READ"),
+                AccessCheck("mfx-console", "ioc:HUGO:ENUM", "WRITE|READ"),
+                AccessCheck("anyhost", "ioc:HUGO:ENUM", "READ"),
+                AccessCheck("mfx-control", "ioc:HUGO:AI", "READ"),
+                AccessCheck("mfx-console", "ioc:HUGO:AI", "READ"),
+                AccessCheck("anyhost", "ioc:HUGO:AI", "READ"),
+            ],
+            id="test"
+        ),
+    ],
+)
+def test_permissions_by_user_direct(
+    access_contents: str, pvlist_contents: str, access_checks: list[AccessCheck]
+):
+    # pvlist_contents = with_pvlist_header(pvlist_contents)
+    with conftest.custom_environment(access_contents, pvlist_contents):
+        with conftest.gateway_channel_access_env():
+            for access_check in access_checks:
+                logger.info("Testing %s", access_check)
+                result = util.caget_from_host(
+                    access_check.hostname, access_check.pvname,
+                    username=access_check.username
+                )
+                assert access_check.access == result.access, str(access_check)

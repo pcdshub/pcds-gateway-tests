@@ -191,18 +191,45 @@ def local_channel_access(
     if not len(ports):
         ports = [default_ioc_port, default_gw_port]
 
-    address_list = [f"localhost:{port}" for port in ports]
-    os.environ["EPICS_CA_AUTO_ADDR_LIST"] = "NO"
-    os.environ["EPICS_CA_ADDR_LIST"] = " ".join(address_list)
-    epics.ca.initialize_libca()
+    address_list = " ".join(f"localhost:{port}" for port in ports)
+    with context_set_env("EPICS_CA_AUTO_ADDR_LIST", "NO"):
+        with context_set_env("EPICS_CA_ADDR_LIST", address_list):
+            epics.ca.initialize_libca()
+            try:
+                yield
+            finally:
+                # This may lead to instability - probably should only run one test per
+                # process
+                epics.ca.clear_cache()
+                epics.ca.finalize_libca()
+                time.sleep(0.2)
+
+
+@contextlib.contextmanager
+def context_set_env(key, value):
+    orig_value = os.environ.get(key, None)
     try:
+        os.environ[key] = value
         yield
     finally:
-        # This may lead to instability - probably should only run one test per
-        # process
-        epics.ca.clear_cache()
-        epics.ca.finalize_libca()
-        time.sleep(0.5)
+        if orig_value is not None:
+            os.environ[key] = orig_value
+
+
+@contextlib.contextmanager
+def gateway_channel_access_env():
+    """Set the environment up for communication solely with the spawned gateway."""
+    with context_set_env("EPICS_CA_AUTO_ADDR_LIST", "NO"):
+        with context_set_env("EPICS_CA_ADDR_LIST", f"localhost:{default_gw_port}"):
+            yield
+
+
+@contextlib.contextmanager
+def ioc_channel_access_env():
+    """Set the environment up for communication solely with the spawned IOC."""
+    with context_set_env("EPICS_CA_AUTO_ADDR_LIST", "NO"):
+        with context_set_env("EPICS_CA_ADDR_LIST", f"localhost:{default_ioc_port}"):
+            yield
 
 
 @contextlib.contextmanager
