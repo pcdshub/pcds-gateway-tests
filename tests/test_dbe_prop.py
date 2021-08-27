@@ -24,10 +24,10 @@ def test_prop_alarm_levels():
         events_received_gw += 1
         logger.info(f' GW update: {pvname} changed to {kws["value"]}')
 
-    def on_change_ioc(pvname=None, **kws):
+    def on_change_ioc(pvname: str = "", value=None, **kwargs):
         nonlocal events_received_ioc
         events_received_ioc += 1
-        logger.info(f'IOC update: {pvname} changed to {kws["value"]}')
+        logger.info(f'IOC update: {pvname} changed to {value}')
 
     # gateway:passive0 is a blank ai record
     ioc, gw = conftest.get_pv_pair(

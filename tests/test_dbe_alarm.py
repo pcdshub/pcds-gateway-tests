@@ -44,6 +44,6 @@ def test_alarm_level():
     # and at the level crossings MINOR-MAJOR-MINOR-NO_ALARM.
     assert events_received == 6
     # Any updates with unchanged severity are an error
-    assert (
-        severity_unchanged == 0
-    ), f"{severity_unchanged} events with no severity changes received"
+    assert severity_unchanged == 0, (
+        f"{severity_unchanged} events with no severity changes received"
+    )

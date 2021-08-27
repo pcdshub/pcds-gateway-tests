@@ -22,7 +22,7 @@ import shutil
 import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor
-from typing import ContextManager, Optional
+from typing import Any, ContextManager, Optional, Protocol
 
 import epics
 import pytest
@@ -235,12 +235,17 @@ def standard_test_environment_decorator(
     return wrapper
 
 
+class PyepicsCallback(Protocol):
+    def __call__(self, pvname: str = "", value: Any = None, **kwargs) -> None:
+        ...
+
+
 def get_pv_pair(
     pvname: str, *,
     ioc_prefix: str = "ioc:",
     gateway_prefix: str = "gateway:",
-    ioc_callback: Optional[callable] = None,
-    gateway_callback: Optional[callable] = None,
+    ioc_callback: Optional[PyepicsCallback] = None,
+    gateway_callback: Optional[PyepicsCallback] = None,
     **kwargs
 ) -> tuple[epics.PV, epics.PV]:
     """Get a PV pair - a direct PV and a gateway PV."""
