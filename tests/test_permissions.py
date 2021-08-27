@@ -1,5 +1,7 @@
 #!/usr/bin/env python
+import dataclasses
 import logging
+import textwrap
 
 import conftest
 import pytest
@@ -16,9 +18,34 @@ else:
 logger = logging.getLogger(__name__)
 
 
+# Keep the header with regex rules separate; \\ is a pain to deal with in
+# strings.
+pvlist_header = r"""
+EVALUATION ORDER ALLOW, DENY
+gateway:\(.*\)  ALIAS ioc:\1
+ioc:.*          DENY
+gwtest:.*       ALLOW
+"""
+
+pvlist_footer = r"""
+"""
+
+
+def with_pvlist_header(pvlist_rules: str) -> str:
+    """Add on the 'standard' pvlist header to the provided rules."""
+    return "\n".join((pvlist_header, textwrap.dedent(pvlist_rules), pvlist_footer))
+
+
+@dataclasses.dataclass
+class AccessCheck:
+    hostname: str
+    pvname: str
+    access: str
+
+
 @have_requirements
 @pytest.mark.parametrize(
-    "access_contents, pvlist_contents",
+    "access_contents, pvlist_contents, access_checks",
     [
         pytest.param(
             """\
@@ -34,17 +61,27 @@ logger = logging.getLogger(__name__)
                 }
             }
             """,
-            """\
-            EVALUATION ORDER ALLOW, DENY
-            .*HUGO:ENUM ALLOW RWMFX
-            .*HUGO:AI ALLOW DEFAULT
+            """
+            gateway:HUGO:ENUM  ALIAS ioc:HUGO:ENUM RWMFX
+            gateway:HUGO:AI    ALIAS ioc:HUGO:AI DEFAULT
             """,
-            id="initial_test"
+            [
+                AccessCheck("mfx-control", "gateway:HUGO:ENUM", "WRITE|READ"),
+                AccessCheck("mfx-console", "gateway:HUGO:ENUM", "WRITE|READ"),
+                AccessCheck("anyhost", "gateway:HUGO:ENUM", "READ"),
+                AccessCheck("mfx-control", "gateway:HUGO:AI", "READ"),
+                AccessCheck("mfx-console", "gateway:HUGO:AI", "READ"),
+                AccessCheck("anyhost", "gateway:HUGO:AI", "READ"),
+            ],
+            id="basic_per_host"
         )
     ]
 )
-def test_permissions_by_host(access_contents, pvlist_contents):
+def test_permissions_by_host(
+    access_contents: str, pvlist_contents: str, access_checks: list[AccessCheck]
+):
+    pvlist_contents = with_pvlist_header(pvlist_contents)
     with conftest.custom_environment(access_contents, pvlist_contents):
-        for host in ["mfx-control", "mfx-console", "psbuild-rhel7"]:
-            logger.error("from %s %s", host, util.caget_from_host(host, "ioc:HUGO:ENUM"))
-            logger.error("from %s %s", host, util.caget_from_host(host, "ioc:HUGO:AI"))
+        for access_check in access_checks:
+            result = util.caget_from_host(access_check.hostname, access_check.pvname)
+            assert access_check.access == result.access
