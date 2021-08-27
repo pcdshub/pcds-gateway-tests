@@ -43,8 +43,11 @@ class AccessCheck:
     access: str
 
 
-with open(conftest.site_access, "rt") as fp:
-    full_access_rights = fp.read()
+try:
+    with open(conftest.site_access, "rt") as fp:
+        full_access_rights = fp.read()
+except FileNotFoundError:
+    full_access_rights = None
 
 
 @have_requirements
@@ -70,6 +73,9 @@ with open(conftest.site_access, "rt") as fp:
         pytest.param(
             full_access_rights,
             id="full",
+            marks=pytest.mark.skipif(
+                not full_access_rights, reason="Full access rights file missing?"
+            )
         ),
     ]
 )
