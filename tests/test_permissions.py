@@ -43,9 +43,13 @@ class AccessCheck:
     access: str
 
 
+with open(conftest.site_access, "rt") as fp:
+    full_access_rights = fp.read()
+
+
 @have_requirements
 @pytest.mark.parametrize(
-    "access_contents, pvlist_contents, access_checks",
+    "access_contents",
     [
         pytest.param(
             """\
@@ -61,6 +65,18 @@ class AccessCheck:
                 }
             }
             """,
+            id="minimal",
+        ),
+        pytest.param(
+            full_access_rights,
+            id="full",
+        ),
+    ]
+)
+@pytest.mark.parametrize(
+    "pvlist_contents, access_checks",
+    [
+        pytest.param(
             """
             gateway:HUGO:ENUM  ALIAS ioc:HUGO:ENUM RWMFX
             gateway:HUGO:AI    ALIAS ioc:HUGO:AI DEFAULT
@@ -73,9 +89,9 @@ class AccessCheck:
                 AccessCheck("mfx-console", "gateway:HUGO:AI", "READ"),
                 AccessCheck("anyhost", "gateway:HUGO:AI", "READ"),
             ],
-            id="basic_per_host"
-        )
-    ]
+            id="test"
+        ),
+    ],
 )
 def test_permissions_by_host(
     access_contents: str, pvlist_contents: str, access_checks: list[AccessCheck]

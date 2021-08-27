@@ -42,6 +42,9 @@ default_ioc_port = 12782
 default_gw_port = 12783
 default_access = os.environ.get("GATEWAY_ACCESS", "default_access.txt")
 default_pvlist = os.environ.get("GATEWAY_PVLIST", "pvlist_bre.txt")
+site_access = os.environ.get(
+    "GATEWAY_SITE_ACCESS", "/cds/group/pcds/gateway/config/pcds-access.acf"
+)
 
 verbose = os.environ.get("VERBOSE", "").lower().startswith("y")
 
