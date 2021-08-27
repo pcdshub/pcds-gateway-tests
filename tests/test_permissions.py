@@ -2,6 +2,7 @@
 import dataclasses
 import logging
 import textwrap
+from typing import Optional
 
 import conftest
 import pytest
@@ -41,6 +42,7 @@ class AccessCheck:
     hostname: str
     pvname: str
     access: str
+    username: Optional[str] = None
 
 
 try:
@@ -48,6 +50,19 @@ try:
         full_access_rights = fp.read()
 except FileNotFoundError:
     full_access_rights = None
+
+
+def check_permissions(
+    access_contents: str, pvlist_contents: str, access_checks: list[AccessCheck]
+):
+    pvlist_contents = with_pvlist_header(pvlist_contents)
+    with conftest.custom_environment(access_contents, pvlist_contents):
+        for access_check in access_checks:
+            result = util.caget_from_host(
+                access_check.hostname, access_check.pvname,
+                username=access_check.username
+            )
+            assert access_check.access == result.access, str(access_check)
 
 
 @have_requirements
@@ -102,8 +117,52 @@ except FileNotFoundError:
 def test_permissions_by_host(
     access_contents: str, pvlist_contents: str, access_checks: list[AccessCheck]
 ):
-    pvlist_contents = with_pvlist_header(pvlist_contents)
-    with conftest.custom_environment(access_contents, pvlist_contents):
-        for access_check in access_checks:
-            result = util.caget_from_host(access_check.hostname, access_check.pvname)
-            assert access_check.access == result.access
+    check_permissions(access_contents, pvlist_contents, access_checks)
+
+
+@have_requirements
+@pytest.mark.parametrize(
+    "access_contents",
+    [
+        pytest.param(
+            """\
+            UAG(testusers) {usera,userb}
+            ASG(DEFAULT) {
+                RULE(1,READ)
+            }
+
+            ASG(RWTESTUSERS) {
+                RULE(1,READ)
+                RULE(1,WRITE,TRAPWRITE){
+                  UAG(testusers)
+                }
+            }
+            """,
+            id="minimal",
+        ),
+    ]
+)
+@pytest.mark.parametrize(
+    "pvlist_contents, access_checks",
+    [
+        pytest.param(
+            """
+            gateway:HUGO:ENUM  ALIAS ioc:HUGO:ENUM RWTESTUSERS
+            gateway:HUGO:AI    ALIAS ioc:HUGO:AI DEFAULT
+            """,
+            [
+                AccessCheck("mfx-control", "gateway:HUGO:ENUM", "WRITE|READ", username="usera"),
+                AccessCheck("mfx-console", "gateway:HUGO:ENUM", "READ", username="userc"),
+                AccessCheck("anyhost", "gateway:HUGO:ENUM", "WRITE|READ", username="userb"),
+                AccessCheck("mfx-control", "gateway:HUGO:AI", "READ", username="userc"),
+                AccessCheck("mfx-console", "gateway:HUGO:AI", "READ", username="usera"),
+                AccessCheck("anyhost", "gateway:HUGO:AI", "READ", username="usera"),
+            ],
+            id="test"
+        ),
+    ],
+)
+def test_permissions_by_user(
+    access_contents: str, pvlist_contents: str, access_checks: list[AccessCheck]
+):
+    check_permissions(access_contents, pvlist_contents, access_checks)
