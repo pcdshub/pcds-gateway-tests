@@ -1,9 +1,7 @@
 import contextlib
 import dataclasses
 import getpass
-import json
 import socket
-import sys
 from typing import Any, Optional
 
 import caproto
@@ -12,7 +10,7 @@ import numpy as np
 
 
 @dataclasses.dataclass
-class CorePVInfo:
+class PVInfo:
     name: str
     access: Optional[str] = None
     data_type: Optional[str] = None
@@ -83,14 +81,14 @@ def _basic_enum_name(value) -> str:
     return str(value).split(".", 1)[1]
 
 
-def check_basics(
+def caget_from_host(
     hostname: str,
     pvname: str,
     timeout: float = client.common.GLOBAL_DEFAULT_TIMEOUT,
     priority: int = 0,
     udp_sock: Optional[socket.socket] = None,
     username: Optional[str] = None,
-) -> CorePVInfo:
+) -> PVInfo:
     """
     Read a Channel's access security settings for the given hostname.
 
@@ -99,53 +97,61 @@ def check_basics(
     Parameters
     ----------
     hostname : str
-        The host name to check.
+        The host name to report when performing the caget.
     pvname : str
         The PV name to check.
     timeout : float, optional
         Default is 1 second.
     priority : 0, optional
         Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+    udp_sock : socket.socket, optional
+        Optional re-usable UDP socket.
+    username : str, optional
+        The username to provide when performing the caget.
 
     Returns
     -------
-    response : AccessRightsResponse
+    pv_info : PVInfo
     """
 
     chan = None
+    pv_info = PVInfo(name=pvname)
     try:
-        with bound_udp_socket(udp_sock, timeout=timeout):
-            with override_hostname_and_username(hostname, username):
-                chan = client.make_channel(pvname, udp_sock, priority, timeout)
-                control_value = client._read(
-                    chan,
-                    timeout,
-                    data_type=client.field_types['control'][chan.native_data_type],
-                    data_count=min((chan.native_data_count, 1)),
-                    force_int_enums=True,
-                    notify=True,
-                )
-                time_value = client._read(
-                    chan,
-                    timeout,
-                    data_type=client.field_types['time'][chan.native_data_type],
-                    data_count=min((chan.native_data_count, 1000)),
-                    force_int_enums=True,
-                    notify=True,
-                )
-                return CorePVInfo(
-                    name=pvname,
-                    access=_basic_enum_name(chan.access_rights),
-                    data_type=_basic_enum_name(chan.native_data_type),
-                    data_count=chan.native_data_count,
-                    value=time_value.data,
-                    time_md=time_value.metadata.to_dict(),
-                    control_md=control_value.metadata.to_dict(),
-                    address=chan.circuit.address,
-                )
+        with bound_udp_socket(
+            udp_sock, timeout=timeout
+        ), override_hostname_and_username(hostname, username):
+            chan = client.make_channel(pvname, udp_sock, priority, timeout)
+            pv_info.access = _basic_enum_name(chan.access_rights)
+            pv_info.data_type = _basic_enum_name(chan.native_data_type)
+            pv_info.data_count = chan.native_data_count
+            pv_info.address = chan.circuit.address
+            control_value = client._read(
+                chan,
+                timeout,
+                data_type=client.field_types["control"][chan.native_data_type],
+                data_count=min((chan.native_data_count, 1)),
+                force_int_enums=True,
+                notify=True,
+            )
+            pv_info.control_md = control_value.metadata.to_dict()
+
+            time_value = client._read(
+                chan,
+                timeout,
+                data_type=client.field_types["time"][chan.native_data_type],
+                data_count=min((chan.native_data_count, 1000)),
+                force_int_enums=True,
+                notify=True,
+            )
+            pv_info.time_md = time_value.metadata.to_dict()
+            pv_info.value = time_value.data
+    except TimeoutError:
+        pv_info.error = "timeout"
     finally:
         if chan is not None:
             _channel_cleanup(chan)
+
+    return pv_info
 
 
 def _filter_data(data):
@@ -167,17 +173,14 @@ def _filter_data(data):
     return data
 
 
-def main():
-    hostname, *pvnames = sys.argv[1:]
-# caproto.config_caproto_logging(level="DEBUG")
-
+def caget_many_from_host(hostname, *pvnames):
     with bound_udp_socket() as udp_sock:
         results = {}
         for pvname in pvnames:
             try:
-                info = check_basics(hostname, pvname, udp_sock=udp_sock)
+                info = caget_from_host(hostname, pvname, udp_sock=udp_sock)
             except TimeoutError:
-                info = CorePVInfo(
+                info = PVInfo(
                     name=pvname,
                     error="timeout",
                 )
@@ -187,8 +190,3 @@ def main():
         "hostname": hostname,
         "pvs": results,
     }
-
-
-if __name__ == '__main__':
-    results = main()
-    print(json.dumps(results, indent=4))
