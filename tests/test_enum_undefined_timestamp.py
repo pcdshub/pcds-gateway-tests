@@ -20,20 +20,20 @@ def test_undefined_timestamp():
     gateway_events_received = 0
     ioc_events_received = 0
 
-    def on_change_gateway(pvname=None, **kws):
+    def on_change_gateway(pvname=None, value=None, timestamp=None, **kwargs):
         nonlocal gateway_events_received
         gateway_events_received += 1
         logger.info(
-            f' GW update: {pvname} changed to {kws["value"]} at %s',
-            timestamp_to_string(kws.get("timestamp"))
+            f' GW update: {pvname} changed to {value} at %s',
+            timestamp_to_string(timestamp)
         )
 
-    def on_change_ioc(pvname=None, **kws):
+    def on_change_ioc(pvname=None, value=None, timestamp=None, **kwargs):
         nonlocal ioc_events_received
         ioc_events_received += 1
         logger.info(
-            f'IOC update: {pvname} changed to {kws["value"]} at %s',
-            timestamp_to_string(kws.get("timestamp"))
+            f'IOC update: {pvname} changed to {value} at %s',
+            timestamp_to_string(timestamp)
         )
 
     ioc_pv, gateway_pv = conftest.get_pv_pair(
