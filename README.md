@@ -26,3 +26,9 @@ Individual fixtures that use ``epics`` to determine support of gateway features
 should be done carefully by performing their task in a separate process to
 avoid interfering with the test suite (see ``conftest.prop_supported`` for an
 example).
+
+Notes on tests
+--------------
+
+* ``test_undefined_timestamp`` does not sufficiently trigger the issue it
+  intends to.  It needs revisiting.
