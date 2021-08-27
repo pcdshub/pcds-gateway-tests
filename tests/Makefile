@@ -12,6 +12,7 @@ tests:
 			test_dbe_value.py \
 			test_enum_property_cache.py \
 			test_enum_undefined_timestamp.py \
+			test_permissions.py \
 			test_property_cache.py \
 			test_simple.py \
 			test_structures.py \

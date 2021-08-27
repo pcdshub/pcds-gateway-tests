@@ -20,6 +20,8 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
+import textwrap
 import time
 from concurrent.futures import ProcessPoolExecutor
 from typing import Any, ContextManager, Optional, Protocol
@@ -225,6 +227,67 @@ def standard_test_environment_decorator(
         def wrapped(*args, **kwargs):
             with standard_test_environment(
                 access=access, pvlist=pvlist, db_file=db_file, dbd_file=dbd_file
+            ):
+                return func(*args, **kwargs)
+        return wrapped
+
+    if func is not None:
+        return wrapper(func)
+
+    return wrapper
+
+
+@contextlib.contextmanager
+def custom_environment(
+    access_contents: str,
+    pvlist_contents: str,
+    db_contents: str = "",
+    db_file: Optional[str] = "test.db",
+    dbd_file: Optional[str] = None,
+    encoding: str = "latin-1",
+):
+    with tempfile.NamedTemporaryFile() as access_fp:
+        access_fp.write(textwrap.dedent(access_contents).encode(encoding))
+        access_fp.flush()
+
+        with tempfile.NamedTemporaryFile() as pvlist_fp:
+            pvlist_fp.write(textwrap.dedent(pvlist_contents).encode(encoding))
+            pvlist_fp.flush()
+
+            with tempfile.NamedTemporaryFile() as dbfile_fp:
+                if db_file is not None:
+                    with open(db_file, "rt") as fp:
+                        existing_db_contents = fp.read()
+                    db_contents = "\n".join(
+                        (existing_db_contents, textwrap.dedent(db_contents))
+                    )
+
+                dbfile_fp.write(textwrap.dedent(db_contents).encode(encoding))
+                dbfile_fp.flush()
+
+                with run_gateway(access=access_fp.name, pvlist=pvlist_fp.name):
+                    with run_ioc(db_file=dbfile_fp.name, dbd_file=dbd_file):
+                        with local_channel_access():
+                            yield
+
+
+def custom_environment_decorator(
+    func=None,
+    access_contents: str = "",
+    pvlist_contents: str = "",
+    db_contents: str = "",
+    db_file: Optional[str] = "test.db",
+    dbd_file: Optional[str] = None,
+):
+    def wrapper(func):
+        @functools.wraps(func)
+        def wrapped(*args, **kwargs):
+            with custom_environment(
+                access_contents=access_contents,
+                pvlist_contents=pvlist_contents,
+                db_contents=db_contents,
+                db_file=db_file,
+                dbd_file=dbd_file,
             ):
                 return func(*args, **kwargs)
         return wrapped

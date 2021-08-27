@@ -38,7 +38,7 @@ def test_undefined_timestamp():
 
     ioc_pv, gateway_pv = conftest.get_pv_pair(
         "HUGO:ENUM",
-        auto_monitor=None,
+        auto_monitor=epics.dbr.DBE_PROPERTY,
         ioc_callback=on_change_ioc,
         gateway_callback=on_change_gateway,
     )

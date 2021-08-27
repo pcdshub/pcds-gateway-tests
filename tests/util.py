@@ -1,12 +1,15 @@
 import contextlib
 import dataclasses
 import getpass
+import logging
 import socket
 from typing import Any, Optional
 
 import caproto
-import caproto.sync.client as client
+import caproto.sync.client as ca_client
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -25,7 +28,7 @@ class PVInfo:
 @contextlib.contextmanager
 def bound_udp_socket(
     reusable_socket: Optional[socket.socket] = None,
-    timeout: float = client.common.GLOBAL_DEFAULT_TIMEOUT,
+    timeout: float = ca_client.common.GLOBAL_DEFAULT_TIMEOUT,
 ):
     """Create a bound UDP socket, optionally reusing the passed-in one."""
     if reusable_socket is not None:
@@ -50,11 +53,15 @@ def override_hostname_and_username(
     orig_gethostname = socket.gethostname
     orig_getuser = getpass.getuser
 
-    def get_host_name():
-        return hostname or orig_gethostname()
+    def get_host_name() -> str:
+        host = hostname or orig_gethostname()
+        logger.debug("Hostname will be: %s", host)
+        return host
 
-    def get_user():
-        return username or orig_getuser()
+    def get_user() -> str:
+        user = username or orig_getuser()
+        logger.debug("Username will be: %s", user)
+        return user
 
     try:
         getpass.getuser = get_user
@@ -69,11 +76,11 @@ def _channel_cleanup(chan: caproto.ClientChannel):
     """Clean up the sync client channel."""
     try:
         if chan.states[caproto.CLIENT] is caproto.CONNECTED:
-            client.send(chan.circuit, chan.clear(), chan.name)
+            ca_client.send(chan.circuit, chan.clear(), chan.name)
     finally:
-        client.sockets[chan.circuit].close()
-        del client.sockets[chan.circuit]
-        del client.global_circuits[(chan.circuit.address, chan.circuit.priority)]
+        ca_client.sockets[chan.circuit].close()
+        del ca_client.sockets[chan.circuit]
+        del ca_client.global_circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
 def _basic_enum_name(value) -> str:
@@ -84,7 +91,7 @@ def _basic_enum_name(value) -> str:
 def caget_from_host(
     hostname: str,
     pvname: str,
-    timeout: float = client.common.GLOBAL_DEFAULT_TIMEOUT,
+    timeout: float = ca_client.common.GLOBAL_DEFAULT_TIMEOUT,
     priority: int = 0,
     udp_sock: Optional[socket.socket] = None,
     username: Optional[str] = None,
@@ -119,26 +126,26 @@ def caget_from_host(
     try:
         with bound_udp_socket(
             udp_sock, timeout=timeout
-        ), override_hostname_and_username(hostname, username):
-            chan = client.make_channel(pvname, udp_sock, priority, timeout)
+        ) as udp_sock, override_hostname_and_username(hostname, username):
+            chan = ca_client.make_channel(pvname, udp_sock, priority, timeout)
             pv_info.access = _basic_enum_name(chan.access_rights)
             pv_info.data_type = _basic_enum_name(chan.native_data_type)
             pv_info.data_count = chan.native_data_count
             pv_info.address = chan.circuit.address
-            control_value = client._read(
+            control_value = ca_client._read(
                 chan,
                 timeout,
-                data_type=client.field_types["control"][chan.native_data_type],
+                data_type=ca_client.field_types["control"][chan.native_data_type],
                 data_count=min((chan.native_data_count, 1)),
                 force_int_enums=True,
                 notify=True,
             )
             pv_info.control_md = control_value.metadata.to_dict()
 
-            time_value = client._read(
+            time_value = ca_client._read(
                 chan,
                 timeout,
-                data_type=client.field_types["time"][chan.native_data_type],
+                data_type=ca_client.field_types["time"][chan.native_data_type],
                 data_count=min((chan.native_data_count, 1000)),
                 force_int_enums=True,
                 notify=True,
