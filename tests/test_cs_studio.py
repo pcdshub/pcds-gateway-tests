@@ -8,17 +8,6 @@ from epics import ca, dbr
 logger = logging.getLogger(__name__)
 
 
-def compare_structures(gw_struct, ioc_struct) -> str:
-    differences = []
-    for key, ioc_value in ioc_struct.items():
-        gateway_value = gw_struct[key]
-        if key != "chid" and ioc_value != gateway_value:
-            differences.append(
-                f"Element '{key}' : GW has '{gateway_value}', IOC has '{ioc_value}'"
-            )
-    return "\n\t".join(differences)
-
-
 @conftest.standard_test_environment_decorator
 def test_cs_studio_value_and_prop_monitor():
     """
@@ -88,7 +77,7 @@ def test_cs_studio_value_and_prop_monitor():
         f"GW {events_received_gw}, IOC {events_received_ioc}"
     )
 
-    differences = compare_structures(gw_struct, ioc_struct)
+    differences = conftest.compare_structures(gw_struct, ioc_struct)
     assert (
         not differences
     ), (
@@ -111,7 +100,7 @@ def test_cs_studio_value_and_prop_monitor():
         f"GW {events_received_gw}, IOC {events_received_ioc}"
     )
 
-    differences = compare_structures(gw_struct, ioc_struct)
+    differences = conftest.compare_structures(gw_struct, ioc_struct)
     assert (
         not differences
     ), (

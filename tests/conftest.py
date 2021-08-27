@@ -306,5 +306,15 @@ def prop_supported() -> bool:
     with ProcessPoolExecutor() as exec:
         future = exec.submit(get_prop_support)
 
-    print("prop support?", future.result())
     return future.result()
+
+
+def compare_structures(gw_struct, ioc_struct) -> str:
+    differences = []
+    for key, ioc_value in ioc_struct.items():
+        gateway_value = gw_struct[key]
+        if key != "chid" and ioc_value != gateway_value:
+            differences.append(
+                f"Element '{key}' : GW has '{gateway_value}', IOC has '{ioc_value}'"
+            )
+    return "\n\t".join(differences)
