@@ -8,7 +8,7 @@ import conftest
 import pytest
 
 try:
-    import util
+    from .. import util
 except ImportError as ex:
     have_requirements = pytest.mark.skip(reason=f"Missing dependencies: {ex}")
 else:
