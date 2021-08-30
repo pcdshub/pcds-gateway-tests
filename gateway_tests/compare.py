@@ -12,8 +12,9 @@ import whatrecord.plugins.happi as happi_plugin
 from whatrecord.access_security import AccessSecurityConfig
 from whatrecord.gateway import GatewayConfig
 
+from .conftest import MODULE_PATH
+
 DESCRIPTION = __doc__
-MODULE = pathlib.Path(__file__).parent
 
 
 def get_ioc_to_pvs() -> dict[str, tuple[str, str]]:
@@ -45,7 +46,7 @@ def get_pv_to_ioc() -> dict[str, str]:
 class HappiInfo(happi_plugin.HappiPluginResults):
     @classmethod
     def from_json(cls, fn: str) -> HappiInfo:
-        with (MODULE / "happi_info.json").open() as fp:
+        with (MODULE_PATH / "happi_info.json").open() as fp:
             happi_json = json.load(fp)
 
         return apischema.deserialize(cls, happi_json)
