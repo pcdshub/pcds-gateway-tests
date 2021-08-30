@@ -72,8 +72,6 @@ def test_undefined_timestamp_subscription(subscription_mask):
             assert gateway_md["timestamp"] != 0, "2nd CA get timestamp is undefined!"
             assert ioc_md["value"] == gateway_md["value"]
 
-            time.sleep(0.1)
-
 
 @conftest.standard_test_environment_decorator
 def test_undefined_timestamp_get_only():
@@ -101,5 +99,3 @@ def test_undefined_timestamp_get_only():
         if ioc_md["status"] != dbr.AlarmStatus.UDF:
             assert gateway_md["status"] != dbr.AlarmStatus.UDF, "2nd CA get is undefined!"
         assert ioc_md["value"] == gateway_md["value"]
-
-        time.sleep(0.1)
