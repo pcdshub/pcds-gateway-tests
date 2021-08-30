@@ -434,3 +434,116 @@ def compare_structures(gw_struct, ioc_struct) -> str:
                 f"Element '{key}' : GW has '{gateway_value}', IOC has '{ioc_value}'"
             )
     return "\n\t".join(differences)
+
+
+@contextlib.contextmanager
+def ca_subscription(
+    pvname: str,
+    callback: PyepicsCallback,
+    mask: int = epics.dbr.DBE_VALUE,
+    form: str = "time",
+    count: int = 0,
+    timeout: float = 0.5,
+) -> ContextManager[int]:
+    """Low-level ``epics.ca`` subscription. Yields channel identifier."""
+    event_id = None
+    chid = epics.ca.create_channel(pvname)
+    try:
+        connected = epics.ca.connect_channel(chid, timeout=timeout)
+        assert connected, f"Could not connect to channel: {pvname}"
+
+        (_, _, event_id) = epics.ca.create_subscription(
+            chid,
+            mask=mask,
+            use_time=form == "time",
+            use_ctrl=form == "ctrl",
+            callback=callback,
+            count=count,
+        )
+        yield chid
+    finally:
+        if event_id is not None:
+            epics.ca.clear_subscription(event_id)
+        epics.ca.clear_channel(chid)
+
+
+@contextlib.contextmanager
+def ca_subscription_pair(
+    pvname: str,
+    ioc_callback: PyepicsCallback,
+    gateway_callback: PyepicsCallback,
+    mask: int = epics.dbr.DBE_VALUE,
+    form: str = "time",
+    count: int = 0,
+    timeout: float = 0.5,
+    ioc_prefix: str = "ioc:",
+    gateway_prefix: str = "gateway:",
+) -> ContextManager[tuple[int, int]]:
+    """Create low-level channels + subscriptions for IOC and gateway PVs."""
+    with ca_subscription(
+        ioc_prefix + pvname,
+        ioc_callback,
+        mask=mask,
+        form=form,
+        count=count,
+        timeout=timeout,
+    ) as ioc_channel:
+        with ca_subscription(
+            gateway_prefix + pvname,
+            ioc_callback,
+            mask=mask,
+            form=form,
+            count=count,
+            timeout=timeout,
+        ) as gateway_channel:
+            yield ioc_channel, gateway_channel
+
+
+def pyepics_caget(
+    pvname: str,
+    form: str = "time",
+    count: int = 0,
+    timeout: float = 0.5,
+) -> dict[str, Any]:
+    """Low-level ``epics.ca`` subscription. Yields channel identifier."""
+    chid = epics.ca.create_channel(pvname)
+    try:
+        connected = epics.ca.connect_channel(chid, timeout=timeout)
+        assert connected, f"Could not connect to channel: {pvname}"
+
+        if form in ("time", "ctrl"):
+            ftype = epics.ca.promote_type(
+                chid, use_time=form == "time", use_ctrl=form == "ctrl"
+            )
+        elif form == "native":
+            ftype = epics.ca.field_type(chid)
+        else:
+            raise ValueError(f"Unsupported form={form}")
+
+        return epics.ca.get_with_metadata(chid, ftype=ftype, count=count, timeout=timeout)
+    finally:
+        epics.ca.clear_channel(chid)
+
+
+def pyepics_caget_pair(
+    pvname: str,
+    form: str = "time",
+    count: int = 0,
+    timeout: float = 0.5,
+    ioc_prefix: str = "ioc:",
+    gateway_prefix: str = "gateway:",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    return (
+        pyepics_caget(
+            pvname=ioc_prefix + pvname,
+            form=form,
+            count=count,
+            timeout=timeout,
+        ),
+        pyepics_caget(
+            pvname=gateway_prefix + pvname,
+            form=form,
+            count=count,
+            timeout=timeout,
+        ),
+    )

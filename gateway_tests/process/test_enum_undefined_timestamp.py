@@ -2,22 +2,42 @@
 import logging
 import time
 
-import epics
+import pytest
+from epics import ca, dbr
 
 from .. import conftest
 
 logger = logging.getLogger(__name__)
 
 
+UNDEFINED_TIMESTAMP = dbr.EPICS2UNIX_EPOCH
+
+
 def timestamp_to_string(timestamp: float) -> str:
-    if timestamp == epics.dbr.EPICS2UNIX_EPOCH:
+    if timestamp == UNDEFINED_TIMESTAMP:
         return "<undefined>"
     return time.ctime(timestamp)
 
 
+@pytest.mark.parametrize(
+    "subscription_mask",
+    [
+        pytest.param(dbr.DBE_VALUE, id="DBE_VALUE"),
+        pytest.param(dbr.DBE_LOG, id="DBE_LOG"),
+        pytest.param(dbr.DBE_ALARM, id="DBE_ALARM"),
+        pytest.param(dbr.DBE_PROPERTY, id="DBE_PROPERTY"),
+        pytest.param(dbr.DBE_VALUE | dbr.DBE_PROPERTY, id="DBE_VALUE|DBE_PROPERTY"),
+        pytest.param(dbr.DBE_VALUE | dbr.DBE_LOG, id="DBE_VALUE|DBE_LOG"),
+        pytest.param(dbr.DBE_VALUE | dbr.DBE_ALARM, id="DBE_VALUE|DBE_ALARM"),
+    ]
+)
 @conftest.standard_test_environment_decorator
-def test_undefined_timestamp():
-    """Two caget on an mbbi - both timestamps should be defined."""
+def test_undefined_timestamp_subscription(subscription_mask):
+    """
+    caget on an mbbi - with subscription configured.
+
+    All timestamps should be defined.
+    """
     gateway_events_received = 0
     ioc_events_received = 0
 
@@ -37,22 +57,49 @@ def test_undefined_timestamp():
             timestamp_to_string(timestamp)
         )
 
-    ioc_pv, gateway_pv = conftest.get_pv_pair(
-        "HUGO:ENUM",
-        auto_monitor=epics.dbr.DBE_PROPERTY,
-        ioc_callback=on_change_ioc,
-        gateway_callback=on_change_gateway,
-    )
+    with conftest.ca_subscription_pair(
+        "HUGO:ENUM", ioc_callback=on_change_ioc, gateway_callback=on_change_gateway,
+        mask=subscription_mask,
+    ) as (ioc_ch, gateway_ch):
+        for iteration in range(1, 5):
+            logger.info("Iteration %d", iteration)
+            ioc_md = ca.get_with_metadata(ioc_ch, ftype=dbr.TIME_ENUM)
+            gateway_md = ca.get_with_metadata(gateway_ch, ftype=dbr.TIME_ENUM)
+            assert ioc_md == gateway_md
 
-    ioc_value = ioc_pv.get()
-    gateway_value = gateway_pv.get()
+            if ioc_md["status"] != dbr.AlarmStatus.UDF:
+                assert gateway_md["status"] != dbr.AlarmStatus.UDF, "2nd CA get is undefined!"
+            assert gateway_md["timestamp"] != 0, "2nd CA get timestamp is undefined!"
+            assert ioc_md["value"] == gateway_md["value"]
 
-    # Verify timestamp and value match
-    assert ioc_value == gateway_value, f"ioc = {ioc_value} != gw = {gateway_value}"
+            time.sleep(0.1)
 
-    # Now get the gateway value again and make sure the timestamp is not undefined
-    gateway_pv.get()
-    if ioc_pv.status != epics.dbr.AlarmStatus.UDF:
-        assert gateway_pv.status != epics.dbr.AlarmStatus.UDF, "2nd CA get is undefined!"
-    assert gateway_pv.timestamp != 0, "2nd CA get timestamp is undefined!"
-    assert ioc_value == gateway_value
+
+@conftest.standard_test_environment_decorator
+def test_undefined_timestamp_get_only():
+    """
+    caget on an mbbi - without subscription configured.
+
+    All timestamps should be defined.
+    """
+    for iteration in range(1, 5):
+        logger.info("Iteration %d", iteration)
+        ioc_md, gateway_md = conftest.pyepics_caget_pair("HUGO:ENUM", form="time")
+        logger.info(
+            "IOC timestamp: %s (%s)",
+            ioc_md["timestamp"], timestamp_to_string(ioc_md["timestamp"])
+        )
+        logger.info(
+            "Gateway timestamp: %s (%s)",
+            gateway_md["timestamp"], timestamp_to_string(gateway_md["timestamp"])
+        )
+
+        assert ioc_md["timestamp"] != UNDEFINED_TIMESTAMP, "IOC timestamp undefined"
+        assert gateway_md["timestamp"] != UNDEFINED_TIMESTAMP, "Gateway timestamp undefined"
+        assert ioc_md["timestamp"] == gateway_md["timestamp"], "Timestamps not equal"
+
+        if ioc_md["status"] != dbr.AlarmStatus.UDF:
+            assert gateway_md["status"] != dbr.AlarmStatus.UDF, "2nd CA get is undefined!"
+        assert ioc_md["value"] == gateway_md["value"]
+
+        time.sleep(0.1)
