@@ -3,9 +3,10 @@ import logging
 import os
 import time
 
-import conftest
 import pytest
 from epics import ca, dbr
+
+from .. import conftest
 
 logger = logging.getLogger(__name__)
 

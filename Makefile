@@ -1,5 +1,8 @@
 all: missing-pvs-report
 
+GATEWAY_ROOT ?= /cds/group/pcds/epics/extensions/gateway/R2.1.2.0-1.3.0
+PYTEST_OPTIONS ?=
+
 
 happi_info.json: /cds/group/pcds/pyps/apps/hutch-python/device_config/db.json
 	@echo "Updating happi_info.json based on device_config database..."
@@ -11,4 +14,10 @@ missing-pvs-report: happi_info.json
 	@python gateway_tests/compare.py missing-pvs-report
 
 
-.PHONY: missing-pvs-report
+tests:
+	GATEWAY_ROOT=$(GATEWAY_ROOT) \
+			pytest -v --forked gateway_tests \
+					$(PYTEST_OPTIONS) \
+
+
+.PHONY: missing-pvs-report process-tests

@@ -4,8 +4,9 @@ import logging
 import textwrap
 from typing import Optional
 
-import conftest
 import pytest
+
+from .. import conftest
 
 try:
     from .. import util
@@ -232,3 +233,75 @@ def test_permissions_by_user_direct(
                     username=access_check.username
                 )
                 assert access_check.access == result.access, str(access_check)
+
+
+@pytest.mark.parametrize(
+    "access_contents",
+    [
+        pytest.param(
+            """\
+            HAG(mfxhosts) {mfx-control,mfx-console}
+            HAG(testhosts) {localhost}
+            ASG(DEFAULT) {
+                RULE(1,READ)
+            }
+            """,
+            id="minimal",
+        ),
+    ]
+)
+@pytest.mark.parametrize(
+    "pvlist_contents, localhost_allow",
+    [
+        pytest.param(
+            """
+            EVALUATION ORDER ALLOW, DENY
+            ioc:HUGO:ENUM  DENY
+            ioc:HUGO:AI    ALLOW
+            """,
+            False,
+            id="blanket_deny",
+        ),
+        pytest.param(
+            """
+            EVALUATION ORDER ALLOW, DENY
+            ioc:HUGO:ENUM  DENY FROM testhosts
+            ioc:HUGO:AI    ALLOW
+            """,
+            False,
+            id="deny_localhost",
+        ),
+        pytest.param(
+            """
+            EVALUATION ORDER ALLOW, DENY
+            ioc:HUGO:ENUM  DENY FROM mfxhosts
+            ioc:HUGO:AI    ALLOW
+            """,
+            True,
+            id="deny_others",
+        ),
+    ]
+)
+@pytest.mark.xfail(reason="WIP")
+def test_permissions_with_deny(
+    access_contents: str, pvlist_contents: str, localhost_allow: bool
+):
+    allow_pv = "ioc:HUGO:ENUM"
+    deny_pv = "ioc:HUGO:AI"
+    host_to_check = "localhost"
+
+    # pvlist_contents = with_pvlist_header(pvlist_contents)
+    with conftest.custom_environment(access_contents, pvlist_contents):
+        for pvname, should_exist in [(allow_pv, True), (deny_pv, localhost_allow)]:
+            # Baseline using direct IOC communication
+            logger.info("Testing %s (should exist: %s)", pvname, should_exist)
+            with conftest.ioc_channel_access_env():
+                baseline = util.caget_from_host(host_to_check, pvname)
+                assert baseline.access == "WRITE|READ"
+
+            with conftest.gateway_channel_access_env():
+                result = util.caget_from_host(host_to_check, pvname)
+                if not should_exist:
+                    assert result.error == "timeout"
+                else:
+                    assert result.access == "READ"

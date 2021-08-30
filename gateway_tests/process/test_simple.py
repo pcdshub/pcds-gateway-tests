@@ -1,5 +1,6 @@
-import conftest
 import epics
+
+from .. import conftest
 
 
 @conftest.standard_test_environment_decorator

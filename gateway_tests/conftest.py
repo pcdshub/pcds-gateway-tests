@@ -18,6 +18,7 @@ import contextlib
 import functools
 import logging
 import os
+import pathlib
 import shutil
 import subprocess
 import tempfile
@@ -37,11 +38,20 @@ libca_so = os.path.join(
 if "PYEPICS_LIBCA" not in os.environ and os.path.exists(libca_so):
     os.environ["PYEPICS_LIBCA"] = libca_so
 
+MODULE_PATH = pathlib.Path(__file__).parent.resolve()
+
 # CA ports to use
 default_ioc_port = 12782
 default_gw_port = 12783
-default_access = os.environ.get("GATEWAY_ACCESS", "default_access.txt")
-default_pvlist = os.environ.get("GATEWAY_PVLIST", "pvlist_bre.txt")
+default_access = os.environ.get(
+    "GATEWAY_ACCESS", str(MODULE_PATH / "process" / "default_access.txt")
+)
+default_pvlist = os.environ.get(
+    "GATEWAY_PVLIST", str(MODULE_PATH / "process" / "pvlist_bre.txt")
+)
+test_ioc_db = os.environ.get(
+    "TEST_DB", str(MODULE_PATH / "process" / "test.db")
+)
 site_access = os.environ.get(
     "GATEWAY_SITE_ACCESS", "/cds/group/pcds/gateway/config/pcds-access.acf"
 )
@@ -126,7 +136,7 @@ def run_process(
 def run_ioc(
     *arglist: str,
     startup_time: float = 0.5,
-    db_file: Optional[str] = "test.db",
+    db_file: Optional[str] = test_ioc_db,
     dbd_file: Optional[str] = None,
     ioc_port: int = default_ioc_port,
 ) -> ContextManager[subprocess.Popen]:
@@ -236,7 +246,7 @@ def ioc_channel_access_env():
 def standard_test_environment(
     access: str = default_access,
     pvlist: str = default_pvlist,
-    db_file: str = "test.db",
+    db_file: str = test_ioc_db,
     dbd_file: Optional[str] = None,
 ):
     with run_gateway(access=access, pvlist=pvlist):
@@ -249,7 +259,7 @@ def standard_test_environment_decorator(
     func=None,
     access: str = default_access,
     pvlist: str = default_pvlist,
-    db_file: str = "test.db",
+    db_file: str = test_ioc_db,
     dbd_file: Optional[str] = None,
 ):
     def wrapper(func):
@@ -272,7 +282,7 @@ def custom_environment(
     access_contents: str,
     pvlist_contents: str,
     db_contents: str = "",
-    db_file: Optional[str] = "test.db",
+    db_file: Optional[str] = test_ioc_db,
     dbd_file: Optional[str] = None,
     encoding: str = "latin-1",
 ):
@@ -306,7 +316,7 @@ def custom_environment_decorator(
     access_contents: str = "",
     pvlist_contents: str = "",
     db_contents: str = "",
-    db_file: Optional[str] = "test.db",
+    db_file: Optional[str] = test_ioc_db,
     dbd_file: Optional[str] = None,
 ):
     def wrapper(func):
