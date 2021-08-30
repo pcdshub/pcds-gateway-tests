@@ -254,7 +254,7 @@ def test_permissions_by_user_direct(
     "pvlist_contents, localhost_allow",
     [
         pytest.param(
-            """
+            """\
             EVALUATION ORDER ALLOW, DENY
             ioc:HUGO:ENUM  DENY
             ioc:HUGO:AI    ALLOW
@@ -263,7 +263,7 @@ def test_permissions_by_user_direct(
             id="blanket_deny",
         ),
         pytest.param(
-            """
+            """\
             EVALUATION ORDER ALLOW, DENY
             ioc:HUGO:ENUM  DENY FROM testhosts
             ioc:HUGO:AI    ALLOW
@@ -272,22 +272,21 @@ def test_permissions_by_user_direct(
             id="deny_localhost",
         ),
         pytest.param(
-            """
+            """\
             EVALUATION ORDER ALLOW, DENY
-            ioc:HUGO:ENUM  DENY FROM mfxhosts
-            ioc:HUGO:AI    ALLOW
+            ioc:.*            ALLOW
+            ioc:HUGO:ENUM      DENY FROM psbuild-rhel7-01
             """,
             True,
             id="deny_others",
         ),
     ]
 )
-@pytest.mark.xfail(reason="WIP")
 def test_permissions_with_deny(
     access_contents: str, pvlist_contents: str, localhost_allow: bool
 ):
-    allow_pv = "ioc:HUGO:ENUM"
-    deny_pv = "ioc:HUGO:AI"
+    allow_pv = "ioc:HUGO:AI"
+    deny_pv = "ioc:HUGO:ENUM"
     host_to_check = "localhost"
 
     # pvlist_contents = with_pvlist_header(pvlist_contents)
@@ -302,6 +301,7 @@ def test_permissions_with_deny(
             with conftest.gateway_channel_access_env():
                 result = util.caget_from_host(host_to_check, pvname)
                 if not should_exist:
-                    assert result.error == "timeout"
+                    assert result.error == "timeout", "Should not exist on the gateway"
                 else:
+                    assert not result.error, "Should exist on the gateway"
                     assert result.access == "READ"

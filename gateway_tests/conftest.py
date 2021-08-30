@@ -305,6 +305,14 @@ def custom_environment(
                 dbfile_fp.write(textwrap.dedent(db_contents).encode(encoding))
                 dbfile_fp.flush()
 
+                logger.info(
+                    "Access rights:\n%s",
+                    textwrap.indent(access_contents, '    ')
+                )
+                logger.info(
+                    "PVList:\n%s",
+                    textwrap.indent(pvlist_contents, '    ')
+                )
                 with run_gateway(access=access_fp.name, pvlist=pvlist_fp.name):
                     with run_ioc(db_file=dbfile_fp.name, dbd_file=dbd_file):
                         with local_channel_access():

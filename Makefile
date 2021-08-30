@@ -17,7 +17,7 @@ missing-pvs-report: happi_info.json
 tests:
 	GATEWAY_ROOT=$(GATEWAY_ROOT) \
 			pytest -v --forked gateway_tests \
-					$(PYTEST_OPTIONS) \
+					$(PYTEST_OPTIONS)
 
 
 .PHONY: missing-pvs-report process-tests
