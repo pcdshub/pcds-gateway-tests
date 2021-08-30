@@ -11,9 +11,10 @@ check if Gateway cache was updated Detects EPICS bug lp:1510955
 import logging
 import time
 
-import conftest
 import pytest
 from epics import ca, dbr
+
+from .. import conftest
 
 logger = logging.getLogger(__name__)
 

@@ -8,8 +8,9 @@ if Gateway cache was updated
 import logging
 import time
 
-import conftest
 from epics import ca, dbr
+
+from .. import conftest
 
 logger = logging.getLogger(__name__)
 

@@ -2,8 +2,9 @@
 import logging
 import time
 
-import conftest
 import epics
+
+from .. import conftest
 
 logger = logging.getLogger(__name__)
 
