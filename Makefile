@@ -20,4 +20,4 @@ tests:
 					$(PYTEST_OPTIONS)
 
 
-.PHONY: missing-pvs-report process-tests
+.PHONY: missing-pvs-report tests
