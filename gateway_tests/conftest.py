@@ -107,7 +107,7 @@ def run_process(
     interactive: bool = False,
     startup_time: float = 0.5,
 ):
-    """Run ``cmd`` and yield a subprocess.POpen instance."""
+    """Run ``cmd`` and yield a subprocess.Popen instance."""
     logger.info("Running: %s (verbose=%s)", " ".join(cmd), verbose)
 
     with open(os.devnull, "wb") as dev_null:
@@ -140,7 +140,27 @@ def run_ioc(
     dbd_file: Optional[str] = None,
     ioc_port: int = default_ioc_port,
 ) -> ContextManager[subprocess.Popen]:
-    """Starts a test IOC."""
+    """
+    Starts a test IOC process with the provided configuration.
+
+    Parameters
+    ----------
+    *arglist : str
+        Extra arguments to pass to the IOC process.
+
+    startup_time : float, optional
+        Time to wait for the IOC to be ready.
+
+    db_file : str, optional
+        Path to the IOC database.  Defaults to ``test_ioc_db``.
+
+    dbd_file : str, optional
+        Path to the IOC database definition.  Defaults to using the database
+        definition provided with epics-base/softIoc.
+
+    ioc_port : int, optional
+        The IOC port number to listen on - defaults to ``default_ioc_port``.
+    """
     env = dict(os.environ)
     env["EPICS_CA_SERVER_PORT"] = str(ioc_port)
     env["EPICS_CA_ADDR_LIST"] = "localhost"
@@ -173,7 +193,32 @@ def run_gateway(
     verbose: bool = verbose_gateway,
     stats_prefix: str = "gwtest",
 ) -> ContextManager[subprocess.Popen]:
-    """Starts the gateway."""
+    """
+    Starts a gateway process with the provided configuration.
+
+    Parameters
+    ----------
+    *extra_args : str
+        Extra arguments to pass to the gateway process.
+
+    access : str, optional
+        The access rights file.  Defaults to ``default_access``.
+
+    pvlist : str, optional
+        The pvlist filename.  Defaults to ``default_pvlist``.
+
+    ioc_port : int, optional
+        The IOC port number - defaults to ``default_ioc_port``.
+
+    gateway_port : int, optional
+        The gateway port number - defaults to ``default_gw_port``.
+
+    verbose : bool, optional
+        Configure the gateway to output verbose information.
+
+    stats_prefix : str, optional
+        Gateway statistics PV prefix.
+    """
     cmd = [
         gateway_executable,
         "-sip", "localhost",
@@ -198,6 +243,15 @@ def run_gateway(
 def local_channel_access(
     *ports: int
 ):
+    """
+    Configures environment variables to only talk to the provided ports.
+
+    Parameters
+    ----------
+    *ports : int
+        The integer port numbers to configure for EPICS_CA_ADDR_LIST. If not
+        provided, defaults to ``[default_ioc_port, default_gw_port]``.
+    """
     if not len(ports):
         ports = [default_ioc_port, default_gw_port]
 
@@ -216,11 +270,12 @@ def local_channel_access(
 
 
 @contextlib.contextmanager
-def context_set_env(key, value):
+def context_set_env(key: str, value: Any):
+    """Context manager to set - and then reset - an environment variable."""
     orig_value = os.environ.get(key, None)
     try:
-        os.environ[key] = value
-        yield
+        os.environ[key] = str(value)
+        yield orig_value
     finally:
         if orig_value is not None:
             os.environ[key] = orig_value
@@ -249,6 +304,25 @@ def standard_test_environment(
     db_file: str = test_ioc_db,
     dbd_file: Optional[str] = None,
 ):
+    """
+    Standard test environment, using already-existing access rights, pvlist,
+    and database files.
+
+    Parameters
+    ----------
+    access : str, optional
+        The access rights filename.  Defaults to ``default_access``.
+
+    pvlist : str, optional
+        The pvlist filename.  Defaults to ``default_pvlist``.
+
+    db_file : str, optional
+        Path to the IOC database.  Defaults to ``test_ioc_db``.
+
+    dbd_file : str, optional
+        Path to the IOC database definition.  Defaults to using the database
+        definition provided with epics-base/softIoc.
+    """
     with run_gateway(access=access, pvlist=pvlist):
         with run_ioc(db_file=db_file, dbd_file=dbd_file):
             with local_channel_access():
@@ -262,6 +336,25 @@ def standard_test_environment_decorator(
     db_file: str = test_ioc_db,
     dbd_file: Optional[str] = None,
 ):
+    """
+    Standard test environment as a decorator for a test function, using
+    already-existing access rights, pvlist, and database files.
+
+    Parameters
+    ----------
+    access : str, optional
+        The access rights filename.  Defaults to ``default_access``.
+
+    pvlist : str, optional
+        The pvlist filename.  Defaults to ``default_pvlist``.
+
+    db_file : str, optional
+        Path to the IOC database.  Defaults to ``test_ioc_db``.
+
+    dbd_file : str, optional
+        Path to the IOC database definition.  Defaults to using the database
+        definition provided with epics-base/softIoc.
+    """
     def wrapper(func):
         @functools.wraps(func)
         def wrapped(*args, **kwargs):
@@ -286,6 +379,29 @@ def custom_environment(
     dbd_file: Optional[str] = None,
     encoding: str = "latin-1",
 ):
+    """
+    Run a gateway and an IOC in a custom environment, specifying the raw
+    contents of the access control file and the pvlist.
+
+    Parameters
+    ----------
+    access_contents : str, optional
+        The gateway access control configuration contents.
+
+    pvlist_contents : str, optional
+        The gateway pvlist configuration contents.
+
+    db_contents : str, optional
+        Additional database text to add to ``db_file``, if specified.
+
+    db_file : str, optional
+        Path to the IOC database.  Defaults to ``test_ioc_db``.  This is loaded
+        in addition to ``db_contents``, if specified.
+
+    dbd_file : str, optional
+        Path to the IOC database definition.  Defaults to using the database
+        definition provided with epics-base/softIoc.
+    """
     with tempfile.NamedTemporaryFile() as access_fp:
         access_fp.write(textwrap.dedent(access_contents).encode(encoding))
         access_fp.flush()
@@ -327,6 +443,28 @@ def custom_environment_decorator(
     db_file: Optional[str] = test_ioc_db,
     dbd_file: Optional[str] = None,
 ):
+    """
+    Custom test environment, as a test function decorator.
+
+    Parameters
+    ----------
+    access_contents : str, optional
+        The gateway access control configuration contents.
+
+    pvlist_contents : str, optional
+        The gateway pvlist configuration contents.
+
+    db_contents : str, optional
+        Additional database text to add to ``db_file``, if specified.
+
+    db_file : str, optional
+        Path to the IOC database.  Defaults to ``test_ioc_db``.  This is loaded
+        in addition to ``db_contents``, if specified.
+
+    dbd_file : str, optional
+        Path to the IOC database definition.  Defaults to using the database
+        definition provided with epics-base/softIoc.
+    """
     def wrapper(func):
         @functools.wraps(func)
         def wrapped(*args, **kwargs):
@@ -359,7 +497,37 @@ def get_pv_pair(
     gateway_callback: Optional[PyepicsCallback] = None,
     **kwargs
 ) -> tuple[epics.PV, epics.PV]:
-    """Get a PV pair - a direct PV and a gateway PV."""
+    """
+    Get a PV pair - a direct PV and a gateway PV.
+
+    Parameters
+    ----------
+    pvname : str
+        The PV name suffix, not including "ioc:" or "gateway:".
+
+    ioc_prefix : str, optional
+        The prefix to add for direct IOC communication.
+
+    gateway_prefix : str, optional
+        The prefix to add for gateway communication.
+
+    ioc_callback : callable, optional
+        A callback function to use for value updates of the IOC PV.
+
+    gateway_callback : callable, optional
+        A callback function to use for value updates of the gateway PV.
+
+    **kwargs :
+        Keyword arguments are passed to both ``epics.PV()`` instances.
+
+    Returns
+    -------
+    ioc_pv : epics.PV
+        The direct IOC PV.
+
+    gateway_pv : epics.PV
+        The gateway PV.
+    """
     ioc_pv = epics.PV(ioc_prefix + pvname, **kwargs)
     if ioc_callback is not None:
         ioc_pv.add_callback(ioc_callback)
@@ -373,6 +541,12 @@ def get_pv_pair(
 
 
 class GatewayStats:
+    """
+    Gateway statistics interface.
+
+    Instantiate and call ``.update()`` to retrieve the number of virtual
+    circuits through ``.vctotal``, for example.
+    """
     vctotal: Optional[int] = None
     pvtotal: Optional[int] = None
     connected: Optional[int] = None
@@ -426,6 +600,15 @@ def prop_supported() -> bool:
 
 
 def compare_structures(gw_struct, ioc_struct) -> str:
+    """
+    Compare two "structures" (*) and return a human-friendly message showing
+    the difference.
+
+    Identical structures will yield an empty string output.
+
+    (*) These are pyepics-provided dictionaries of information such as
+    timestamp, value, alarm status, and so on.
+    """
     differences = []
     for key, ioc_value in ioc_struct.items():
         gateway_value = gw_struct[key]
@@ -445,7 +628,36 @@ def ca_subscription(
     count: int = 0,
     timeout: float = 0.5,
 ) -> ContextManager[int]:
-    """Low-level ``epics.ca`` subscription. Yields channel identifier."""
+    """
+    Create a low-level channel and subscription for a provided pvname.
+
+    Yields channel identifier.
+
+    Parameters
+    ----------
+    pvname : str
+        The PV name suffix, not including "ioc:" or "gateway:".
+
+    callback : callable
+        A callback function to use for value updates.
+
+    mask : int, optional
+        The DBE mask to use for subscriptions.
+
+    form : {"native", "time", "ctrl"}, optional
+        The form to request.
+
+    count : int, optional
+        The number of elements to request.
+
+    timeout : float, optional
+        The timeout in seconds for connection.
+
+    Yields
+    ------
+    channel : int
+        The Channel Access client channel ID.
+    """
     event_id = None
     chid = epics.ca.create_channel(pvname)
     try:
@@ -479,7 +691,46 @@ def ca_subscription_pair(
     ioc_prefix: str = "ioc:",
     gateway_prefix: str = "gateway:",
 ) -> ContextManager[tuple[int, int]]:
-    """Create low-level channels + subscriptions for IOC and gateway PVs."""
+    """
+    Create low-level channels + subscriptions for IOC and gateway PVs.
+
+    Parameters
+    ----------
+    pvname : str
+        The PV name suffix, not including "ioc:" or "gateway:".
+
+    ioc_callback : callable
+        A callback function to use for value updates of the IOC PV.
+
+    gateway_callback : callable
+        A callback function to use for value updates of the gateway PV.
+
+    mask : int, optional
+        The DBE mask to use for subscriptions.
+
+    form : {"native", "time", "ctrl"}, optional
+        The form to request.
+
+    count : int, optional
+        The number of elements to request.
+
+    timeout : float, optional
+        The timeout in seconds for connection.
+
+    ioc_prefix : str, optional
+        The prefix to add for direct IOC communication.
+
+    gateway_prefix : str, optional
+        The prefix to add for gateway communication.
+
+    Yields
+    ------
+    ioc_channel : int
+        The IOC Channel Access client channel ID.
+
+    gateway_channel : int
+        The gateway Channel Access client channel ID.
+    """
     with ca_subscription(
         ioc_prefix + pvname,
         ioc_callback,
@@ -505,7 +756,25 @@ def pyepics_caget(
     count: int = 0,
     timeout: float = 0.5,
 ) -> dict[str, Any]:
-    """Low-level ``epics.ca`` subscription. Yields channel identifier."""
+    """
+    Use low-level pyepics.ca to get data from a PV.
+
+    Parameters
+    ----------
+    pvname : str
+        The PV name.
+
+    form : {"native", "time", "ctrl"}
+        The form to request.
+
+    count : int
+        The number of elements to request.
+
+    Returns
+    -------
+    data : dict
+        The PV data, with keys such as "timestamp" or "value".
+    """
     chid = epics.ca.create_channel(pvname)
     try:
         connected = epics.ca.connect_channel(chid, timeout=timeout)
@@ -533,6 +802,34 @@ def pyepics_caget_pair(
     ioc_prefix: str = "ioc:",
     gateway_prefix: str = "gateway:",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Use low-level pyepics.ca to get data from a direct PV and a gateway PV.
+
+    Parameters
+    ----------
+    pvname : str
+        The PV name suffix, not including "ioc:" or "gateway:".
+
+    form : {"native", "time", "ctrl"}
+        The form to request.
+
+    count : int
+        The number of elements to request.
+
+    ioc_prefix : str, optional
+        The prefix to add for direct IOC communication.
+
+    gateway_prefix : str, optional
+        The prefix to add for gateway communication.
+
+    Returns
+    -------
+    ioc_data : dict
+        The direct IOC PV data.
+
+    gateway_data : dict
+        The gateway PV data.
+    """
     return (
         pyepics_caget(
             pvname=ioc_prefix + pvname,
