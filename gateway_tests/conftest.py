@@ -617,6 +617,9 @@ def find_differences(
         The second structure to compare.  Pairs with the user-friendly
         ``desc2`` description.
 
+    skip_keys : list of str, optional
+        List of keys to skip when comparing.  Defaults to ['chid'].
+
     Yields
     ------
     key : str
@@ -629,7 +632,7 @@ def find_differences(
         The value from struct2.
     """
     if skip_keys is None:
-        skip_keys = {'chid'}
+        skip_keys = ['chid']
 
     for key in sorted(set(struct1).union(struct2)):
         if key not in skip_keys:

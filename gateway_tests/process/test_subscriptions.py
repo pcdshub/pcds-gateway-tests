@@ -98,18 +98,61 @@ def test_subscription_on_connection(pvname: str, mask: int, form: str):
         form,
         ioc_events,
         strict=False,
+        nan_strict=False,
     )
+
+
+def is_acceptable_nan_difference(value1, value2) -> bool:
+    """Are (value1, value2) either NaN or 0.0?"""
+    if not isinstance(value1, (int, float)) or not isinstance(value2, (int, float)):
+        return False
+
+    # Value1 = nan, value2 = {0, nan}
+    if math.isnan(value1):
+        return value2 == 0.0 or math.isnan(value2)
+
+    # Value2 = nan, value1 = {0, nan}
+    if math.isnan(value2):
+        return value1 == 0.0 or math.isnan(value1)
+
+    # Something else is different (value1 != value2)
+    return False
+
+
+def deduplicate_events(events: list[dict]) -> list[dict]:
+    """De-duplicate identical subsequent events in the list."""
+    if not events:
+        return []
+
+    result = [events[0]]
+    for event in events[1:]:
+        if conftest.compare_structures(result[-1], event) != "":
+            logger.warning("Removing duplicate event: %s", event)
+            result.append(event)
+
+    return result
 
 
 def compare_subscription_events(
     gateway_events: list[dict],
     form: str,
     ioc_events: list[dict],
-    strict: bool = True,
+    strict: bool = False,
+    nan_strict: bool = False,
+    deduplicate: bool = True,
 ):
     """
     Compare subscription events.
     """
+    for event_idx, ioc_event in enumerate(ioc_events, 1):
+        logger.info("IOC %d/%d: %s", event_idx, len(ioc_events), ioc_event)
+
+    for event_idx, gateway_event in enumerate(gateway_events, 1):
+        logger.info("Gateway %d/%d: %s", event_idx, len(gateway_events), gateway_event)
+
+    if deduplicate:
+        gateway_events = deduplicate_events(gateway_events)
+
     for event_idx, (gateway_event, ioc_event) in enumerate(
         zip(gateway_events, ioc_events), 1
     ):
@@ -123,16 +166,35 @@ def compare_subscription_events(
             ioc_event.pop("timestamp", None)
 
         differences = conftest.compare_structures(gateway_event, ioc_event)
-        if differences:
-            raise RuntimeError(
-                f"Differences in event {event_idx} of {len(ioc_events)}:\n"
-                f"{differences}"
+        if not differences:
+            logger.info(
+                "Event %d is identical, with value=%s timestamp=%s",
+                event_idx,
+                gateway_event.get("value"),
+                gateway_event.get("timestamp")
             )
-        logger.info(
-            "Event %d is identical, with value=%s timestamp=%s",
-            event_idx,
-            gateway_event.get("value"),
-            gateway_event.get("timestamp")
+            continue
+
+        if all(
+            is_acceptable_nan_difference(value1, value2)
+            for _, value1, value2 in conftest.find_differences(
+                gateway_event, ioc_event
+            )
+        ):
+            if nan_strict:
+                raise RuntimeError(
+                    f"NaN-handling differences in event {event_idx} of "
+                    f"IOC={len(ioc_events)} GW={len(gateway_events)}:\n {differences}"
+                )
+            else:
+                logger.warning(
+                    "Partial passed comparison - NaN handling issue."
+                )
+                continue
+
+        raise RuntimeError(
+            f"Differences in event {event_idx} of IOC={len(ioc_events)} "
+            f"GW={len(gateway_events)}:\n{differences}"
         )
 
     if len(gateway_events) == 2 and len(ioc_events) == 1:
@@ -151,21 +213,17 @@ def compare_subscription_events(
             return
 
         if all(
-            isinstance(value1, (int, float))
-            and math.isnan(value1)
-            and value2 == 0.0
-            for key, value1, value2 in conftest.find_differences(
+            is_acceptable_nan_difference(value1, value2)
+            for _, value1, value2 in conftest.find_differences(
                 gateway_events[0], gateway_events[1]
             )
         ):
-            if strict:
-                raise RuntimeError(f"NaN event and then 0.0 event:\n{differences}")
-                return
+            if nan_strict:
+                raise RuntimeError(f"NaN handling difference:\n{differences}")
 
             logger.warning(
                 "Partial passed test - gateway behaves slightly differently.  "
-                "Gateway duplicated sub callback with NaN then 0.0 for some "
-                "values."
+                "NaN and 0.0 values are mixed."
             )
             return
         else:
@@ -221,31 +279,20 @@ def test_subscription_with_put(pvname: str, mask: int, form: str, values: list[A
         form=form,
         mask=mask,
     ) as (ioc_ch, gateway_ch):
-        _wait_event(gateway_events, ioc_events, count=1, timeout=0.2)
+        # Time for initial monitor event
+        time.sleep(0.2)
         # Throw away initial events; we care what happens from now on
         del gateway_events[:]
         del ioc_events[:]
         for value in values:
             ca.put(ioc_ch, value)
-            _wait_event(gateway_events, ioc_events)
-        time.sleep(0.1)
+            time.sleep(0.3)
+        time.sleep(0.3)
 
     compare_subscription_events(
         gateway_events,
         form,
         ioc_events,
         strict=True,
+        nan_strict=False,
     )
-
-
-def _wait_event(*lists: list[dict], count: int = 1, timeout: float = 0.1):
-    """
-    Wait for each list to get an updated event.
-    """
-    end_time = time.time() + timeout
-    waiting_for = tuple(len(lst) + count for lst in lists)
-    while time.time() < end_time:
-        lengths = tuple(len(lst) for lst in lists)
-        if lengths == waiting_for:
-            break
-    return lengths
