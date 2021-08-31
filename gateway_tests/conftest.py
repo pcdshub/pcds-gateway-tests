@@ -17,6 +17,7 @@ Environment variables used:
 import contextlib
 import functools
 import logging
+import math
 import os
 import pathlib
 import shutil
@@ -599,7 +600,7 @@ def prop_supported() -> bool:
     return future.result()
 
 
-def compare_structures(gw_struct, ioc_struct) -> str:
+def compare_structures(gw_struct, ioc_struct, desc1="Gateway", desc2="IOC") -> str:
     """
     Compare two "structures" (*) and return a human-friendly message showing
     the difference.
@@ -613,8 +614,12 @@ def compare_structures(gw_struct, ioc_struct) -> str:
     for key, ioc_value in ioc_struct.items():
         gateway_value = gw_struct[key]
         if key != "chid" and ioc_value != gateway_value:
+            if math.isnan(ioc_value) and math.isnan(gateway_value):
+                # nan != nan, remember?
+                continue
             differences.append(
-                f"Element '{key}' : GW has '{gateway_value}', IOC has '{ioc_value}'"
+                f"Element '{key}' : {desc1} has '{gateway_value}', but "
+                f"{desc2} has '{ioc_value}'"
             )
     return "\n\t".join(differences)
 
