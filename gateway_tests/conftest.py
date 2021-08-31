@@ -600,7 +600,7 @@ def prop_supported() -> bool:
     return future.result()
 
 
-def compare_structures(gw_struct, ioc_struct, desc1="Gateway", desc2="IOC") -> str:
+def compare_structures(struct1, struct2, desc1="Gateway", desc2="IOC") -> str:
     """
     Compare two "structures" (*) and return a human-friendly message showing
     the difference.
@@ -611,8 +611,12 @@ def compare_structures(gw_struct, ioc_struct, desc1="Gateway", desc2="IOC") -> s
     timestamp, value, alarm status, and so on.
     """
     differences = []
-    for key, ioc_value in ioc_struct.items():
-        gateway_value = gw_struct[key]
+    for key, ioc_value in struct2.items():
+        try:
+            gateway_value = struct1[key]
+        except KeyError:
+            raise RuntimeError(f"Missing key {key} in {desc1}")
+
         if key != "chid" and ioc_value != gateway_value:
             if math.isnan(ioc_value) and math.isnan(gateway_value):
                 # nan != nan, remember?

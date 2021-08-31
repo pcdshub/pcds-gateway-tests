@@ -1,9 +1,11 @@
+import copy
 import functools
 import logging
 import time
+from typing import Any
 
 import pytest
-from epics import dbr
+from epics import ca, dbr
 
 from .. import conftest
 
@@ -22,6 +24,17 @@ masks = pytest.mark.parametrize(
     ]
 )
 
+value_masks = pytest.mark.parametrize(
+    "mask",
+    [
+        pytest.param(dbr.DBE_VALUE, id="DBE_VALUE"),
+        pytest.param(dbr.DBE_VALUE | dbr.DBE_PROPERTY, id="DBE_VALUE|DBE_PROPERTY"),
+        pytest.param(dbr.DBE_VALUE | dbr.DBE_LOG, id="DBE_VALUE|DBE_LOG"),
+        pytest.param(dbr.DBE_VALUE | dbr.DBE_ALARM, id="DBE_VALUE|DBE_ALARM"),
+    ]
+)
+
+
 forms = pytest.mark.parametrize(
     "form",
     [
@@ -36,8 +49,8 @@ forms = pytest.mark.parametrize(
     [
         "HUGO:AI",
         "HUGO:ENUM",
-        "auto",
-        "auto:cnt",
+        # "auto",      # <-- updates based on auto:cnt
+        # "auto:cnt",  # <-- updates periodically
         "enumtest",
         "gwcachetest",
         "passive0",
@@ -47,11 +60,11 @@ forms = pytest.mark.parametrize(
         "passiveMBBI",
         "passivelongin",
         "bigpassivewaveform",
-        # "fillingaai",
-        # "fillingaao",
-        # "fillingcompress",
-        # "fillingwaveform",
-        # "passivewaveform",
+        "fillingaai",
+        "fillingaao",
+        "fillingcompress",
+        "fillingwaveform",
+        "passivewaveform",
     ]
 )
 @masks
@@ -68,7 +81,7 @@ def test_subscription_on_connection(pvname: str, mask: int, form: str):
     ioc_events = []
 
     def on_change(event_list, pvname=None, chid=None, **kwargs):
-        event_list.append(kwargs)
+        event_list.append(copy.deepcopy(kwargs))
 
     with conftest.ca_subscription_pair(
         pvname,
@@ -80,24 +93,44 @@ def test_subscription_on_connection(pvname: str, mask: int, form: str):
         time.sleep(0.1)
 
     compare_subscription_events(
-        gateway_events, ioc_events,
-        strict=False
+        gateway_events,
+        form,
+        ioc_events,
+        strict=False,
     )
 
 
 def compare_subscription_events(
     gateway_events: list[dict],
+    form: str,
     ioc_events: list[dict],
     strict: bool = True,
 ):
     """
     Compare subscription events.
     """
-    for gateway_event, ioc_event in zip(gateway_events, ioc_events):
+    for event_idx, (gateway_event, ioc_event) in enumerate(
+        zip(gateway_events, ioc_events), 1
+    ):
         # assert gateway_event == ioc_event
+        if form == "ctrl":
+            gateway_event = dict(gateway_event)
+            ioc_event = dict(ioc_event)
+            gateway_event.pop("timestamp", None)
+            ioc_event.pop("timestamp", None)
+
         differences = conftest.compare_structures(gateway_event, ioc_event)
         if differences:
-            raise RuntimeError(f"Differences in events:\n{differences}")
+            raise RuntimeError(
+                f"Differences in event {event_idx} of {len(ioc_events)}:\n"
+                f"{differences}"
+            )
+        logger.info(
+            "Event %d is identical, with value=%s timestamp=%s",
+            event_idx,
+            gateway_event.get("value"),
+            gateway_event.get("timestamp")
+        )
 
     if len(gateway_events) == 2 and len(ioc_events) == 1:
         differences = conftest.compare_structures(
@@ -120,3 +153,85 @@ def compare_subscription_events(
         f"Gateway events = {len(gateway_events)}, "
         f"but IOC events = {len(ioc_events)}."
     )
+
+
+@pytest.mark.parametrize(
+    "pvname, values",
+    [
+        pytest.param(
+            "HUGO:AI",
+            [0.2, 1.2]
+        ),
+        pytest.param(
+            "HUGO:ENUM",
+            [1, 2],
+        ),
+        # "auto",
+        # "auto:cnt",
+        # "enumtest",
+        # "gwcachetest",
+        # "passive0",
+        # "passiveADEL",
+        # "passiveADELALRM",
+        # "passiveALRM",
+        # "passiveMBBI",
+        # "passivelongin",
+        # "bigpassivewaveform",
+        # "fillingaai",
+        # "fillingaao",
+        # "fillingcompress",
+        # "fillingwaveform",
+        # "passivewaveform",
+    ]
+)
+@forms
+@value_masks
+@conftest.standard_test_environment_decorator
+def test_subscription_with_put(pvname: str, mask: int, form: str, values: list[Any]):
+    """
+    Putting a value to the IOC and compare subscription events.
+
+    For the provided pv name, mask, and form (ctrl/time), do we receive the same
+    subscription updates on connection to the gateway/IOC?
+    """
+    gateway_events = []
+    ioc_events = []
+
+    def on_change(event_list, pvname=None, chid=None, **kwargs):
+        event_list.append(kwargs)
+
+    with conftest.ca_subscription_pair(
+        pvname,
+        ioc_callback=functools.partial(on_change, ioc_events),
+        gateway_callback=functools.partial(on_change, gateway_events),
+        form=form,
+        mask=mask,
+    ) as (ioc_ch, gateway_ch):
+        _wait_event(gateway_events, ioc_events, count=1, timeout=0.2)
+        # Throw away initial events; we care what happens from now on
+        del gateway_events[:]
+        del ioc_events[:]
+        for value in values:
+            ca.put(ioc_ch, value)
+            _wait_event(gateway_events, ioc_events)
+        time.sleep(0.1)
+
+    compare_subscription_events(
+        gateway_events,
+        form,
+        ioc_events,
+        strict=True,
+    )
+
+
+def _wait_event(*lists: list[dict], count: int = 1, timeout: float = 0.1):
+    """
+    Wait for each list to get an updated event.
+    """
+    end_time = time.time() + timeout
+    waiting_for = tuple(len(lst) + count for lst in lists)
+    while time.time() < end_time:
+        lengths = tuple(len(lst) for lst in lists)
+        if lengths == waiting_for:
+            break
+    return lengths
