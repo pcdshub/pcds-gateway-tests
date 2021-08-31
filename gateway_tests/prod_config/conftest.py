@@ -57,7 +57,7 @@ def correct_gateway_pvinfo(config: PCDSConfiguration, pvinfo: PVInfo,
     # If we timed out, the gateway should also time out
     if pvinfo.error == 'timeout':
         return pvinfo
-    
+
     # Otherwise, we need to determine which access rules apply.
     # First, we need to know which subnet the PV is on.
     subnet = get_pcds_subnet(pvinfo.address[0])
@@ -89,7 +89,7 @@ def correct_gateway_pvinfo(config: PCDSConfiguration, pvinfo: PVInfo,
                 'Programmer did not know that match.command could be '
                 f'{match.command}'
                 )
-    
+
     # Next we see what each relevant file says about our PV
     gateway_access_summary = {}
     for filename in filenames:
@@ -124,7 +124,8 @@ def correct_gateway_pvinfo(config: PCDSConfiguration, pvinfo: PVInfo,
     # Well, ideally we have exactly one or zero READ or WRITE, and the rest disconnected.
     # If we have two READ, two WRITE, one READ and one WRITE, etc. that is an error.
     # Otherwise just contstruct with the non-ambiguous item.
-    gw_behavior = [(fn, bh) for (fn, bh) in gateway_access_summary.items() if bh != AccessBehavior.DISCONNECTED]
+    gw_behavior = [(fn, bh) for (fn, bh) in gateway_access_summary.items()
+                   if bh != AccessBehavior.DISCONNECTED]
 
     if len(gw_behavior == 0):
         return PVInfo(
@@ -277,4 +278,3 @@ def get_pcds_subnet(ipaddr: str) -> str:
         if if_info.can_ping(ipaddr):
             return if_info.name
     raise ValueError(f'Recieved non-pcds ip address {ipaddr}.')
-
