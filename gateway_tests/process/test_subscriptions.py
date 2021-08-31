@@ -114,6 +114,8 @@ def compare_subscription_events(
     ):
         # assert gateway_event == ioc_event
         if form == "ctrl":
+            # Ignore timestamp for control events, if it made its way into the
+            # dictionary somehow.
             gateway_event = dict(gateway_event)
             ioc_event = dict(ioc_event)
             gateway_event.pop("timestamp", None)
@@ -158,30 +160,22 @@ def compare_subscription_events(
 @pytest.mark.parametrize(
     "pvname, values",
     [
-        pytest.param(
-            "HUGO:AI",
-            [0.2, 1.2]
-        ),
-        pytest.param(
-            "HUGO:ENUM",
-            [1, 2],
-        ),
-        # "auto",
-        # "auto:cnt",
-        # "enumtest",
-        # "gwcachetest",
-        # "passive0",
-        # "passiveADEL",
-        # "passiveADELALRM",
-        # "passiveALRM",
-        # "passiveMBBI",
-        # "passivelongin",
-        # "bigpassivewaveform",
-        # "fillingaai",
-        # "fillingaao",
-        # "fillingcompress",
-        # "fillingwaveform",
-        # "passivewaveform",
+        pytest.param("HUGO:AI", [0.2, 1.2]),
+        pytest.param("HUGO:ENUM", [1, 2]),
+        pytest.param("enumtest", [1, 2]),
+        pytest.param("gwcachetest", [-20, 0, 20]),
+        pytest.param("passive0", [1, 21]),
+        pytest.param("passiveADEL", [1, 20]),
+        pytest.param("passiveADELALRM", [1, 20]),
+        pytest.param("passiveALRM", [1, 5, 10]),
+        pytest.param("passiveMBBI", [1, 2]),
+        pytest.param("passivelongin", [1, 2]),
+        pytest.param("bigpassivewaveform", [[1, 2, 3], [4, 5, 6]]),
+        # pytest.param("fillingaai", []),
+        # pytest.param("fillingaao", []),
+        # pytest.param("fillingcompress", []),
+        # pytest.param("fillingwaveform", []),
+        # pytest.param("passivewaveform", []),
     ]
 )
 @forms
