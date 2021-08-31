@@ -1,6 +1,7 @@
 import copy
 import functools
 import logging
+import math
 import time
 from typing import Any
 
@@ -139,17 +140,36 @@ def compare_subscription_events(
             gateway_events[0], gateway_events[1],
             desc1="event 0", desc2="event 1",
         )
-        if differences:
+        if not differences:
+            if strict:
+                raise RuntimeError("Duplicate initial event received")
+
+            logger.warning(
+                "Partial passed test - gateway behaves slightly differently.  "
+                "Gateway duplicates initial subscription callback for this mask."
+            )
+            return
+
+        if all(
+            isinstance(value1, (int, float))
+            and math.isnan(value1)
+            and value2 == 0.0
+            for key, value1, value2 in conftest.find_differences(
+                gateway_events[0], gateway_events[1]
+            )
+        ):
+            if strict:
+                raise RuntimeError(f"NaN event and then 0.0 event:\n{differences}")
+                return
+
+            logger.warning(
+                "Partial passed test - gateway behaves slightly differently.  "
+                "Gateway duplicated sub callback with NaN then 0.0 for some "
+                "values."
+            )
+            return
+        else:
             raise RuntimeError(f"Differences in events:\n{differences}")
-
-        if strict:
-            raise RuntimeError("Duplicate initial event received")
-
-        logger.warning(
-            "Partial passed test - gateway behaves slightly differently.  "
-            "Gateway duplicates initial subscription callback for this mask."
-        )
-        return
 
     assert len(gateway_events) == len(ioc_events), (
         f"Gateway events = {len(gateway_events)}, "
@@ -186,7 +206,7 @@ def test_subscription_with_put(pvname: str, mask: int, form: str, values: list[A
     Putting a value to the IOC and compare subscription events.
 
     For the provided pv name, mask, and form (ctrl/time), do we receive the same
-    subscription updates on connection to the gateway/IOC?
+    subscription updates after putting values to the IOC?
     """
     gateway_events = []
     ioc_events = []

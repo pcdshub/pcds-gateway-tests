@@ -26,7 +26,7 @@ import tempfile
 import textwrap
 import time
 from concurrent.futures import ProcessPoolExecutor
-from typing import Any, ContextManager, Optional, Protocol
+from typing import Any, ContextManager, Generator, Optional, Protocol
 
 import epics
 import pytest
@@ -600,6 +600,65 @@ def prop_supported() -> bool:
     return future.result()
 
 
+def find_differences(
+    struct1: dict, struct2: dict, skip_keys: Optional[list[str]] = None
+) -> Generator[tuple[str, Any, Any], None, None]:
+    """
+    Compare two "structures" and yield keys and values which differ.
+
+    Parameters
+    ----------
+    struct1 : dict
+        The first structure to compare.  Pairs with the user-friendly ``desc1``
+        description. This is a pyepics-provided dictionaries of information
+        such as timestamp, value, alarm status, and so on.
+
+    struct2 : dict
+        The second structure to compare.  Pairs with the user-friendly
+        ``desc2`` description.
+
+    Yields
+    ------
+    key : str
+        The key that differs.
+
+    value1 :
+        The value from struct1.
+
+    value1 :
+        The value from struct2.
+    """
+    if skip_keys is None:
+        skip_keys = {'chid'}
+
+    for key in sorted(set(struct1).union(struct2)):
+        if key not in skip_keys:
+            try:
+                value1 = struct1[key]
+            except KeyError:
+                raise RuntimeError(f"Missing key {key} in first struct")
+
+            try:
+                value2 = struct2[key]
+            except KeyError:
+                raise RuntimeError(f"Missing key {key} in second struct")
+
+            if hasattr(value2, "tolist"):
+                value2 = tuple(value2.tolist())
+            if hasattr(value1, "tolist"):
+                value1 = tuple(value1.tolist())
+
+            try:
+                if math.isnan(value1) and math.isnan(value2):
+                    # nan != nan, remember?
+                    continue
+            except TypeError:
+                ...
+
+            if value2 != value1:
+                yield key, value1, value2
+
+
 def compare_structures(struct1, struct2, desc1="Gateway", desc2="IOC") -> str:
     """
     Compare two "structures" and return a human-friendly message showing the
@@ -627,25 +686,11 @@ def compare_structures(struct1, struct2, desc1="Gateway", desc2="IOC") -> str:
         the IOC.
     """
     differences = []
-    for key, ioc_value in struct2.items():
-        try:
-            gateway_value = struct1[key]
-        except KeyError:
-            raise RuntimeError(f"Missing key {key} in {desc1}")
-
-        if hasattr(ioc_value, "tolist"):
-            ioc_value = tuple(ioc_value.tolist())
-        if hasattr(gateway_value, "tolist"):
-            gateway_value = tuple(gateway_value.tolist())
-
-        if key != "chid" and ioc_value != gateway_value:
-            if math.isnan(ioc_value) and math.isnan(gateway_value):
-                # nan != nan, remember?
-                continue
-            differences.append(
-                f"Element '{key}' : {desc1} has '{gateway_value}', but "
-                f"{desc2} has '{ioc_value}'"
-            )
+    for key, value1, value2 in find_differences(struct1, struct2):
+        differences.append(
+            f"Element '{key}' : {desc1} has '{value1}', but "
+            f"{desc2} has '{value2}'"
+        )
     return "\n\t".join(differences)
 
 
