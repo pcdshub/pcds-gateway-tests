@@ -3,6 +3,7 @@
 # Get them from the IOC and through the gateway
 # Figure out exactly what the gateway should have said
 # Take several samples
+import dataclasses
 import enum
 import os.path
 
@@ -15,11 +16,13 @@ class AccessBehavior(enum.IntEnum):
     READ = 1
     WRITE = 2
 
+
 def promote_access(current, new):
     if new > current:
         return new
     else:
         return current
+
 
 def demote_access(current, new):
     if new < current:
@@ -48,7 +51,8 @@ def correct_gateway_pvinfo(config: PCDSConfiguration, pvinfo: PVInfo,
     Returns
     -------
     gwinfo : PVInfo
-        The pv info we should see from the gateway if all is well.
+        The pv info we should see from the gateway if all is well. Note that this
+        will not fill in the pvinfo address field for the gateway.
     """
     # If we timed out, the gateway should also time out
     if pvinfo.error == 'timeout':
@@ -130,9 +134,7 @@ def correct_gateway_pvinfo(config: PCDSConfiguration, pvinfo: PVInfo,
     elif len(gw_behavior == 1):
         # Demote our original access level if needed
         new_access = demote_access(AccessBehavior(pvinfo.access), gw_behavior[0][1])
-        # Find the gateway hostname and port
-        gwhost = 'not impl' # TODO
-        port = 0
+        # Omit the gateway address- not in scope here
         return PVInfo(
             name=pvinfo.name,
             access=new_access.name,
@@ -142,11 +144,137 @@ def correct_gateway_pvinfo(config: PCDSConfiguration, pvinfo: PVInfo,
             error=pvinfo.error,
             time_md=pvinfo.time_md,
             control_md=pvinfo.control_md,
-            address=(gwhost, port),
         )
     else:
         raise RuntimeError(f'Gateway configs are inconsistent: {gw_behavior}')
 
 
-def get_pcds_subnet(ipaddr):
-    raise NotImplementedError()
+@dataclasses.dataclass
+class InterfaceInfo:
+    name: str
+    ipaddr: str
+    mask: str
+
+    def can_ping(self, ipaddr: str) -> bool:
+        """
+        True if this interface should be able to ping the ipaddr
+        """
+        def split_ints(octets):
+            return (int(num) for num in octets.split('.'))
+        my_ip = split_ints(self.ipaddr)
+        full_mask = split_ints(self.mask)
+        your_ip = split_ints(ipaddr)
+        for mine, mask, yours in zip(my_ip, full_mask, your_ip):
+            if mine & mask != yours & mask:
+                return False
+        return True
+
+
+PSCAG01_IFS = [
+    InterfaceInfo(
+        name='cxi',
+        ipaddr='172.21.68.10',
+        mask='255.255.252.0',
+        ),
+    InterfaceInfo(
+        name='det',
+        ipaddr='172.21.58.10',
+        mask='255.255.255.0',
+    ),
+    InterfaceInfo(
+        name='dev',
+        ipaddr='134.79.165.10',
+        mask='255.255.255.0',
+    ),
+    InterfaceInfo(
+        name='drp',
+        ipaddr='172.21.156.10',
+        mask='255.255.252.0',
+    ),
+    InterfaceInfo(
+        name='kfe',
+        ipaddr='172.21.92.10',
+        mask='255.255.252.0',
+    ),
+    InterfaceInfo(
+        name='las',
+        ipaddr='172.21.160.10',
+        mask='255.255.252.0',
+    ),
+    InterfaceInfo(
+        name='lfe',
+        ipaddr='172.21.88.10',
+        mask='255.255.252.0',
+    ),
+    InterfaceInfo(
+        name='mcc',
+        ipaddr='172.21.40.10',
+        mask='255.255.255.192',
+    ),
+    InterfaceInfo(
+        name='mec',
+        ipaddr='172.21.76.10',
+        mask='255.255.255.192',
+    ),
+    InterfaceInfo(
+        name='mfx',
+        ipaddr='172.21.72.10',
+        mask='255.255.252.0',
+    ),
+    InterfaceInfo(
+        name='rix',
+        ipaddr='172.21.140.10',
+        mask='255.255.252.0',
+    ),
+    InterfaceInfo(
+        name='srv',
+        ipaddr='172.21.32.154',
+        mask='255.255.255.0',
+    ),
+    InterfaceInfo(
+        name='tmo',
+        ipaddr='172.21.132.10',
+        mask='255.255.252.0',
+    ),
+    InterfaceInfo(
+        name='tst',
+        ipaddr='172.21.148.10',
+        mask='255.255.252.0',
+    ),
+    InterfaceInfo(
+        name='xcs',
+        ipaddr='172.21.80.10',
+        mask='255.255.252.0',
+    ),
+    InterfaceInfo(
+        name='xpp',
+        ipaddr='172.21.84.10',
+        mask='255.255.252.0',
+    ),
+    InterfaceInfo(
+        name='ued',
+        ipaddr='172.21.36.10',
+        mask='255.255.252.0',
+    ),
+]
+
+
+def get_pcds_subnet(ipaddr: str) -> str:
+    """
+    Return the name of the pcds subnet based on the ip address.
+
+    Parameters
+    ----------
+    ipaddr : str
+        IP address as a string, e.g. '127.0.0.1'
+
+    Returns
+    -------
+    subnet : str
+        Subnet name as a string, e.g. 'lfe'
+    """
+    for if_info in PSCAG01_IFS:
+        if if_info.can_ping(ipaddr):
+            return if_info.name
+    raise ValueError(f'Recieved non-pcds ip address {ipaddr}.')
+
