@@ -602,13 +602,29 @@ def prop_supported() -> bool:
 
 def compare_structures(struct1, struct2, desc1="Gateway", desc2="IOC") -> str:
     """
-    Compare two "structures" (*) and return a human-friendly message showing
-    the difference.
+    Compare two "structures" and return a human-friendly message showing the
+    difference.
 
-    Identical structures will yield an empty string output.
+    Identical structures will return an empty string.
 
-    (*) These are pyepics-provided dictionaries of information such as
-    timestamp, value, alarm status, and so on.
+    Parameters
+    ----------
+    struct1 : dict
+        The first structure to compare.  Pairs with the user-friendly ``desc1``
+        description. This is a pyepics-provided dictionaries of information
+        such as timestamp, value, alarm status, and so on.
+
+    struct2 : dict
+        The second structure to compare.  Pairs with the user-friendly
+        ``desc2`` description.
+
+    desc1 : str
+        User-friendly description of ``struct1``, by default referring to
+        the gateway.
+
+    desc2 : str
+        User-friendly description of ``struct2``, by default referring to
+        the IOC.
     """
     differences = []
     for key, ioc_value in struct2.items():
