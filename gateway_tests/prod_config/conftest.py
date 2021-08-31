@@ -17,7 +17,23 @@ class AccessBehavior(enum.IntEnum):
     WRITE = 2
 
 
+def interpret_access(access):
+    try:
+        return AccessBehavior(access)
+    except ValueError:
+        pass
+    try:
+        return AccessBehavior[access]
+    except KeyError:
+        pass
+    if access.startswith('WRITE'):
+        return AccessBehavior.WRITE
+    raise ValueError(f'Could not interpret {access} as an AccessBehavior.')
+
+
 def promote_access(current, new):
+    current = interpret_access(current)
+    new = interpret_access(new)
     if new > current:
         return new
     else:
@@ -25,6 +41,8 @@ def promote_access(current, new):
 
 
 def demote_access(current, new):
+    current = interpret_access(current)
+    new = interpret_access(new)
     if new < current:
         return new
     else:
@@ -71,12 +89,12 @@ def correct_gateway_pvinfo(config: PCDSConfiguration, pvinfo: PVInfo,
         if not os.path.basename(match.filename).startswith(subnet):
             continue
         filenames.add(match.filename)
-        if match.command == 'DENY':
+        if match.rule.command == 'DENY':
             deny_matches[match.filename] = match
-        elif match.command.contains('ALLOW'):
+        elif 'ALLOW' in match.rule.command:
             allow_matches[match.filename] = match
-        elif match.command.contains('DENY FROM'):
-            if match.command == f'DENY FROM {hostname}':
+        elif 'DENY FROM' in match.rule.command:
+            if match.rule.command == f'DENY FROM {hostname}':
                 # Short-circuit everything else
                 # This sends out a NO_ACCESS event, rather than disconnected
                 # Do not need to consider anything else
@@ -86,8 +104,8 @@ def correct_gateway_pvinfo(config: PCDSConfiguration, pvinfo: PVInfo,
                 )
         else:
             raise NotImplementedError(
-                'Programmer did not know that match.command could be '
-                f'{match.command}'
+                'Programmer did not know that match.rule.command could be '
+                f'{match.rule.command}'
                 )
 
     # Next we see what each relevant file says about our PV
@@ -101,23 +119,23 @@ def correct_gateway_pvinfo(config: PCDSConfiguration, pvinfo: PVInfo,
             gateway_access_summary[filename] = AccessBehavior.DISCONNECTED
         elif allow is not None:
             # Now we need to evaluate the access rule for our host
-            if allow.access is None:
+            if allow.rule.access is None:
                 # Default behavior
                 gateway_access_summary[filename] = AccessBehavior.READ
             else:
                 # Look it up if not default
-                access_group = config.access_security.groups[allow.access.group]
+                access_group = config.access_security.groups[allow.rule.access.group]
 
                 behavior = AccessBehavior.DISCONNECTED
                 for rule in access_group.rules:
                     if rule.hosts is None:
-                        behavior = promote_access(behavior, AccessBehavior(rule.options))
+                        behavior = promote_access(behavior, rule.options)
                     else:
                         hosts = set()
                         for host_group in rule.hosts:
                             hosts.update(config.access_security.hosts[host_group].hosts)
                         if hostname in hosts:
-                            behavior = promote_access(behavior, AccessBehavior(rule.options))
+                            behavior = promote_access(behavior, rule.options)
                 gateway_access_summary[filename] = behavior
 
     # Now we know how each gateway should respond to our PV. So what should we see?
@@ -127,18 +145,22 @@ def correct_gateway_pvinfo(config: PCDSConfiguration, pvinfo: PVInfo,
     gw_behavior = [(fn, bh) for (fn, bh) in gateway_access_summary.items()
                    if bh != AccessBehavior.DISCONNECTED]
 
-    if len(gw_behavior == 0):
+    if len(gw_behavior) == 0:
         return PVInfo(
             name=pvinfo.name,
             error='timeout',
         )
-    elif len(gw_behavior == 1):
+    elif len(gw_behavior) == 1:
         # Demote our original access level if needed
-        new_access = demote_access(AccessBehavior(pvinfo.access), gw_behavior[0][1])
+        new_access = demote_access(pvinfo.access, gw_behavior[0][1])
+        if new_access == AccessBehavior.WRITE:
+            access_str = 'WRITE|READ'
+        else:
+            access_str = new_access.name
         # Omit the gateway address- not in scope here
         return PVInfo(
             name=pvinfo.name,
-            access=new_access.name,
+            access=access_str,
             data_type=pvinfo.data_type,
             data_count=pvinfo.data_count,
             value=pvinfo.value,
