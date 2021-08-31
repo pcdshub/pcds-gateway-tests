@@ -741,7 +741,7 @@ def ca_subscription_pair(
     ) as ioc_channel:
         with ca_subscription(
             gateway_prefix + pvname,
-            ioc_callback,
+            gateway_callback,
             mask=mask,
             form=form,
             count=count,
