@@ -617,6 +617,11 @@ def compare_structures(struct1, struct2, desc1="Gateway", desc2="IOC") -> str:
         except KeyError:
             raise RuntimeError(f"Missing key {key} in {desc1}")
 
+        if hasattr(ioc_value, "tolist"):
+            ioc_value = tuple(ioc_value.tolist())
+        if hasattr(gateway_value, "tolist"):
+            gateway_value = tuple(gateway_value.tolist())
+
         if key != "chid" and ioc_value != gateway_value:
             if math.isnan(ioc_value) and math.isnan(gateway_value):
                 # nan != nan, remember?
