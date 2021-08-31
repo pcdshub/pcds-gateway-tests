@@ -17,6 +17,7 @@ Environment variables used:
 import contextlib
 import functools
 import logging
+import math
 import os
 import pathlib
 import shutil
@@ -25,7 +26,7 @@ import tempfile
 import textwrap
 import time
 from concurrent.futures import ProcessPoolExecutor
-from typing import Any, ContextManager, Optional, Protocol
+from typing import Any, ContextManager, Generator, Optional, Protocol
 
 import epics
 import pytest
@@ -599,23 +600,100 @@ def prop_supported() -> bool:
     return future.result()
 
 
-def compare_structures(gw_struct, ioc_struct) -> str:
+def find_differences(
+    struct1: dict, struct2: dict, skip_keys: Optional[list[str]] = None
+) -> Generator[tuple[str, Any, Any], None, None]:
     """
-    Compare two "structures" (*) and return a human-friendly message showing
-    the difference.
+    Compare two "structures" and yield keys and values which differ.
 
-    Identical structures will yield an empty string output.
+    Parameters
+    ----------
+    struct1 : dict
+        The first structure to compare.  Pairs with the user-friendly ``desc1``
+        description. This is a pyepics-provided dictionaries of information
+        such as timestamp, value, alarm status, and so on.
 
-    (*) These are pyepics-provided dictionaries of information such as
-    timestamp, value, alarm status, and so on.
+    struct2 : dict
+        The second structure to compare.  Pairs with the user-friendly
+        ``desc2`` description.
+
+    skip_keys : list of str, optional
+        List of keys to skip when comparing.  Defaults to ['chid'].
+
+    Yields
+    ------
+    key : str
+        The key that differs.
+
+    value1 :
+        The value from struct1.
+
+    value1 :
+        The value from struct2.
+    """
+    if skip_keys is None:
+        skip_keys = ['chid']
+
+    for key in sorted(set(struct1).union(struct2)):
+        if key not in skip_keys:
+            try:
+                value1 = struct1[key]
+            except KeyError:
+                raise RuntimeError(f"Missing key {key} in first struct")
+
+            try:
+                value2 = struct2[key]
+            except KeyError:
+                raise RuntimeError(f"Missing key {key} in second struct")
+
+            if hasattr(value2, "tolist"):
+                value2 = tuple(value2.tolist())
+            if hasattr(value1, "tolist"):
+                value1 = tuple(value1.tolist())
+
+            try:
+                if math.isnan(value1) and math.isnan(value2):
+                    # nan != nan, remember?
+                    continue
+            except TypeError:
+                ...
+
+            if value2 != value1:
+                yield key, value1, value2
+
+
+def compare_structures(struct1, struct2, desc1="Gateway", desc2="IOC") -> str:
+    """
+    Compare two "structures" and return a human-friendly message showing the
+    difference.
+
+    Identical structures will return an empty string.
+
+    Parameters
+    ----------
+    struct1 : dict
+        The first structure to compare.  Pairs with the user-friendly ``desc1``
+        description. This is a pyepics-provided dictionaries of information
+        such as timestamp, value, alarm status, and so on.
+
+    struct2 : dict
+        The second structure to compare.  Pairs with the user-friendly
+        ``desc2`` description.
+
+    desc1 : str
+        User-friendly description of ``struct1``, by default referring to
+        the gateway.
+
+    desc2 : str
+        User-friendly description of ``struct2``, by default referring to
+        the IOC.
     """
     differences = []
-    for key, ioc_value in ioc_struct.items():
-        gateway_value = gw_struct[key]
-        if key != "chid" and ioc_value != gateway_value:
-            differences.append(
-                f"Element '{key}' : GW has '{gateway_value}', IOC has '{ioc_value}'"
-            )
+    for key, value1, value2 in find_differences(struct1, struct2):
+        differences.append(
+            f"Element '{key}' : {desc1} has '{value1}', but "
+            f"{desc2} has '{value2}'"
+        )
     return "\n\t".join(differences)
 
 
@@ -741,7 +819,7 @@ def ca_subscription_pair(
     ) as ioc_channel:
         with ca_subscription(
             gateway_prefix + pvname,
-            ioc_callback,
+            gateway_callback,
             mask=mask,
             form=form,
             count=count,
