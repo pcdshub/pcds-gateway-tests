@@ -9,7 +9,8 @@ import whatrecord.plugins.happi as happi_plugin
 from whatrecord.access_security import AccessSecurityConfig
 from whatrecord.gateway import GatewayConfig
 
-from .constants import MODULE_PATH
+from .constants import EPICSCAGP, GATEWAY_CFG, MODULE_PATH, PCDS_ACCESS
+from .interface import InterfaceConfig
 
 
 def get_ioc_to_pvs() -> dict[str, tuple[str, str]]:
@@ -55,15 +56,19 @@ class PCDSConfiguration:
     _instance_: ClassVar[PCDSConfiguration]
     gateway_config: GatewayConfig
     access_security: AccessSecurityConfig
+    interface_config: InterfaceConfig
     happi_info: HappiInfo
     pv_to_ioc: dict[str, str]
 
     def __init__(self):
         self.gateway_config = GatewayConfig(
-            path="/cds/group/pcds/gateway/config"
+            path=str(GATEWAY_CFG)
         )
         self.access_security = AccessSecurityConfig.from_file(
-            "/cds/group/pcds/gateway/config/pcds-access.acf"
+            str(PCDS_ACCESS)
+        )
+        self.interface_config = InterfaceConfig(
+            EPICSCAGP
         )
         self.happi_info = HappiInfo.from_json("happi_info.json")
         self.pv_to_ioc = get_pv_to_ioc()
