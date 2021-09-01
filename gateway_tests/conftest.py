@@ -31,6 +31,9 @@ from typing import Any, ContextManager, Generator, Optional, Protocol
 import epics
 import pytest
 
+from .constants import MODULE_PATH, PCDS_ACCESS
+
+
 logger = logging.getLogger(__name__)
 
 libca_so = os.path.join(
@@ -38,8 +41,6 @@ libca_so = os.path.join(
 )
 if "PYEPICS_LIBCA" not in os.environ and os.path.exists(libca_so):
     os.environ["PYEPICS_LIBCA"] = libca_so
-
-MODULE_PATH = pathlib.Path(__file__).parent.resolve()
 
 # CA ports to use
 default_ioc_port = 12782
@@ -54,7 +55,7 @@ test_ioc_db = os.environ.get(
     "TEST_DB", str(MODULE_PATH / "process" / "test.db")
 )
 site_access = os.environ.get(
-    "GATEWAY_SITE_ACCESS", "/cds/group/pcds/gateway/config/pcds-access.acf"
+    "GATEWAY_SITE_ACCESS", str(PCDS_ACCESS)
 )
 
 verbose = os.environ.get("VERBOSE", "").lower().startswith("y")

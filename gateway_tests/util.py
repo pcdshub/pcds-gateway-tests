@@ -11,7 +11,7 @@ import caproto
 import caproto.sync.client as ca_client
 import numpy as np
 
-from .compare import PCDSConfiguration
+from .config import PCDSConfiguration
 
 logger = logging.getLogger(__name__)
 
