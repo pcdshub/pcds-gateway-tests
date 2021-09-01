@@ -19,7 +19,6 @@ import functools
 import logging
 import math
 import os
-import pathlib
 import shutil
 import subprocess
 import tempfile
@@ -31,8 +30,8 @@ from typing import Any, ContextManager, Generator, Optional, Protocol
 import epics
 import pytest
 
+from .config import PCDSConfig
 from .constants import MODULE_PATH, PCDS_ACCESS
-
 
 logger = logging.getLogger(__name__)
 
@@ -922,4 +921,62 @@ def pyepics_caget_pair(
             count=count,
             timeout=timeout,
         ),
+    )
+
+
+@contextlib.contextmanager
+def prod_addr_list(config: PCDSConfig, subnets: list[str]):
+    """
+    Context manager for limited broadcasts in prod tests.
+
+    This only works while on a gateway host.
+
+    Sets the following environment variables:
+    EPICS_CA_ADDR_LIST based on the subnets chosen
+    EPICS_CA_AUTO_ADDR_LIST to NO
+
+    And restores them after the context expires.
+    """
+    ADDR_LIST = 'EPICS_CA_ADDR_LIST'
+    AUTO_ADDR = 'EPICS_CA_AUTO_ADDR_LIST'
+    old_addr_list = os.environ.get(ADDR_LIST, None)
+    old_auto_addr = os.environ.get(AUTO_ADDR, None)
+
+    broadcast_addrs = [
+        config.interface_config.subnets[subnet].bcaddr for subnet in subnets
+    ]
+    os.environ[ADDR_LIST] = ' '.join(broadcast_addrs)
+    os.environ[AUTO_ADDR] = 'NO'
+    yield
+    if old_addr_list is None:
+        del os.environ[ADDR_LIST]
+    else:
+        os.environ[ADDR_LIST] = old_addr_list
+    if old_auto_addr is None:
+        del os.environ[AUTO_ADDR]
+    else:
+        os.environ[AUTO_ADDR] = old_auto_addr
+
+
+@contextlib.contextmanager
+def prod_gw_addrs(config: PCDSConfig):
+    """
+    Preset for prod_addr_list context manager that selects gateways only.
+
+    This only works while on a gateway host.
+    """
+    yield from prod_addr_list(config, ['dev'])
+
+
+@contextlib.contextmanager
+def prod_ioc_addrs(config: PCDSConfig):
+    """
+    Preset for prod_addr_list context manager that selects IOC hosts only.
+
+    This only works while on a gateway host.
+    """
+    yield from prod_addr_list(
+        config,
+        [subnet for subnet in config.interface_config.subnets.keys()
+         if subnet not in ('dev', 'srv')]
     )
