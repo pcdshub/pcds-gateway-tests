@@ -15,6 +15,7 @@ Environment variables used:
 """
 
 import contextlib
+import dataclasses
 import functools
 import logging
 import math
@@ -32,6 +33,7 @@ import pytest
 
 from .config import PCDSConfiguration
 from .constants import MODULE_PATH, PCDS_ACCESS
+from .util import PVInfo
 
 logger = logging.getLogger(__name__)
 
@@ -695,6 +697,45 @@ def compare_structures(struct1, struct2, desc1="Gateway", desc2="IOC") -> str:
             f"{desc2} has '{value2}'"
         )
     return "\n\t".join(differences)
+
+
+def find_pvinfo_differences(
+    pvinfo1: PVInfo,
+    pvinfo2: PVInfo,
+    skip_keys: Optional[list[str]] = None,
+) -> Generator[tuple[str, Any, Any], None, None]:
+    """
+    Find the differences between two PVInfo dataclasses.
+    """
+    if skip_keys is None:
+        skip_keys = ['address']
+
+    struct1 = dataclasses.asdict(pvinfo1)
+    struct2 = dataclasses.asdict(pvinfo2)
+
+    yield from find_differences(
+        struct1=struct1,
+        struct2=struct2,
+        skip_keys=skip_keys + ['time_md', 'control_md'],
+    )
+    if 'time_md' not in skip_keys:
+        # Can be dict or None, make it dict
+        pvinfo1_tmd = pvinfo1.time_md or {}
+        pvinfo2_tmd = pvinfo2.time_md or {}
+        yield from find_differences(
+            struct1={f'time_{k}': v for k, v in pvinfo1_tmd.items()},
+            struct2={f'time_{k}': v for k, v in pvinfo2_tmd.items()},
+            skip_keys=skip_keys,
+        )
+    if 'control_md' not in skip_keys:
+        # Can be dict or None, make it dict
+        pvinfo1_cmd = pvinfo1.control_md or {}
+        pvinfo2_cmd = pvinfo2.control_md or {}
+        yield from find_differences(
+            struct1={f'ctrl_{k}': v for k, v in pvinfo1_cmd.items()},
+            struct2={f'ctrl_{k}': v for k, v in pvinfo2_cmd.items()},
+            skip_keys=skip_keys,
+        )
 
 
 @contextlib.contextmanager

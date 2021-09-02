@@ -4,6 +4,7 @@ Classes for understanding PCDS gateway interfaces.
 import dataclasses
 import pathlib
 import re
+import socket
 
 IP_VARIABLE = re.compile(r"^export\s+([^= ]*)\s*=\s*(\d+\.\d+\.\d+\.\d+).*$")
 INTERFACE = re.compile(r"(.*)_IF(\d\d)")
@@ -109,6 +110,10 @@ class InterfaceConfig:
             if info.contains_ip(ipaddr):
                 return name
         raise ValueError(f'Recieved non-pcds ip address {ipaddr}')
+
+    def subnet_from_hostname(self, hostname: str) -> str:
+        ipaddr = socket.gethostbyname(hostname)
+        return self.subnet_from_ip(ipaddr)
 
 
 def get_mask(ipaddr: str, bcaddr: str) -> str:

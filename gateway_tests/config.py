@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import glob
 import json
 import pathlib
+import re
 from typing import ClassVar
 
 import apischema
@@ -22,6 +24,9 @@ def get_ioc_to_pvs() -> dict[str, tuple[str, str]]:
     ioc_to_pvs = {}
     iocdata = pathlib.Path("/cds/data/iocData")
     for pvlist in iocdata.glob("*/iocInfo/IOC.pvlist"):
+        # Edge case: iocData aliases
+        if pvlist.parent.parent.is_symlink():
+            continue
         ioc_name = pvlist.parts[len(iocdata.parts)]
         with open(pvlist, "rt") as fp:
             ioc_to_pvs[ioc_name] = dict(
@@ -37,6 +42,24 @@ def get_pv_to_ioc() -> dict[str, str]:
         for ioc, pvs in get_ioc_to_pvs().items()
         for pv in pvs
     }
+
+
+IOCMANAGER_RE = re.compile(r"^.*id:.*'(\S+)', host: '(\S+)'.*$")
+
+
+def get_ioc_to_host() -> dict[str, str]:
+    ioc_to_host = {}
+    cfgs = glob.glob("/cds/group/pcds/pyps/config/*/iocmanager.cfg")
+    for cfg_filename in cfgs:
+        with open(cfg_filename, 'r') as fd:
+            lines = fd.read().splitlines()
+        for line in lines:
+            line = line.strip()
+            match = IOCMANAGER_RE.match(line)
+            if match:
+                iocname, hostname = match.groups()
+                ioc_to_host[iocname] = hostname
+    return ioc_to_host
 
 
 class HappiInfo(happi_plugin.HappiPluginResults):
@@ -59,6 +82,7 @@ class PCDSConfiguration:
     interface_config: InterfaceConfig
     happi_info: HappiInfo
     pv_to_ioc: dict[str, str]
+    ioc_to_host: dict[str, str]
 
     def __init__(self):
         self.gateway_config = GatewayConfig(
@@ -72,6 +96,7 @@ class PCDSConfiguration:
         )
         self.happi_info = HappiInfo.from_json("happi_info.json")
         self.pv_to_ioc = get_pv_to_ioc()
+        self.ioc_to_host = get_ioc_to_host()
 
     @staticmethod
     def instance():

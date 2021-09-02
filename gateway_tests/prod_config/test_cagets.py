@@ -1,10 +1,16 @@
-import dataclasses
+import logging
 import socket
 
 from ..config import PCDSConfiguration
-from ..conftest import (compare_structures, find_differences, prod_gw_addrs,
-                        prod_ioc_addrs)
-from ..util import caget_from_host, correct_gateway_pvinfo
+from ..conftest import find_pvinfo_differences, prod_gw_addrs, prod_ioc_addrs
+from ..util import (caget_from_host, correct_gateway_pvinfo,
+                    predict_gateway_response)
+
+logger = logging.getLogger(__name__)
+
+HUTCHES = ['amo', 'rix', 'xpp', 'xcs', 'mfx', 'cxi', 'mec']
+SUFFS = ['control', 'daq']
+CLIENT_HOSTS = [f'{hutch}-{suff}' for hutch in HUTCHES for suff in SUFFS]
 
 
 def compare_gets(pvname: str, hosts: list[str]):
@@ -30,28 +36,37 @@ def compare_gets(pvname: str, hosts: list[str]):
                 hostname=host,
                 pvname=pvname,
             )
+    with prod_ioc_addrs(config):
+        post_pvinfo = caget_from_host(
+            hostname=socket.gethostname(),
+            pvname=pvname,
+        )
+    sanity_diff = {
+        key: (value1, value2) for key, value1, value2 in
+        find_pvinfo_differences(true_pvinfo, post_pvinfo)
+    }
+    if sanity_diff:
+        logger.warning(
+            f'{pvname} updated during compare_gets, '
+            'ignoring fields that changed.'
+        )
 
     all_diffs = {}
     for host, pvinfo in gw_pvinfo.items():
-        answer = correct_gateway_pvinfo(
+        predicted_response = predict_gateway_response(
             config=config,
-            pvinfo=true_pvinfo,
+            pvname=pvname,
             hostname=host,
         )
-        all_diffs[host] = list(find_differences(
-            dataclasses.asdict(answer),
-            dataclasses.asdict(pvinfo),
-            skip_keys=['address'],
+        answer = correct_gateway_pvinfo(
+            response_summary=predicted_response,
+            pvinfo=true_pvinfo,
+        )
+        all_diffs[host] = list(
+            find_pvinfo_differences(
+                answer,
+                pvinfo,
+                skip_keys=['address'] + list(sanity_diff.keys())
             )
         )
-        if all_diffs[host]:
-            print(f'Issue for {host}:')
-            print('\t' + compare_structures(
-                dataclasses.asdict(answer),
-                dataclasses.asdict(pvinfo),
-                desc1='Expected',
-                desc2='Gateway',
-                )
-            )
-
     return all_diffs
