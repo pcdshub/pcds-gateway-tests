@@ -30,7 +30,7 @@ from typing import Any, ContextManager, Generator, Optional, Protocol
 import epics
 import pytest
 
-from .config import PCDSConfig
+from .config import PCDSConfiguration
 from .constants import MODULE_PATH, PCDS_ACCESS
 
 logger = logging.getLogger(__name__)
@@ -925,7 +925,7 @@ def pyepics_caget_pair(
 
 
 @contextlib.contextmanager
-def prod_addr_list(config: PCDSConfig, subnets: list[str]):
+def prod_addr_list(config: PCDSConfiguration, subnets: list[str]):
     """
     Context manager for limited broadcasts in prod tests.
 
@@ -959,24 +959,26 @@ def prod_addr_list(config: PCDSConfig, subnets: list[str]):
 
 
 @contextlib.contextmanager
-def prod_gw_addrs(config: PCDSConfig):
+def prod_gw_addrs(config: PCDSConfiguration):
     """
     Preset for prod_addr_list context manager that selects gateways only.
 
     This only works while on a gateway host.
     """
-    yield from prod_addr_list(config, ['dev'])
+    with prod_addr_list(config, ['dev']):
+        yield
 
 
 @contextlib.contextmanager
-def prod_ioc_addrs(config: PCDSConfig):
+def prod_ioc_addrs(config: PCDSConfiguration):
     """
     Preset for prod_addr_list context manager that selects IOC hosts only.
 
     This only works while on a gateway host.
     """
-    yield from prod_addr_list(
+    with prod_addr_list(
         config,
         [subnet for subnet in config.interface_config.subnets.keys()
          if subnet not in ('dev', 'srv')]
-    )
+    ):
+        yield
