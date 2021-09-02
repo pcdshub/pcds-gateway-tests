@@ -9,9 +9,11 @@ from ..conftest import find_pvinfo_differences, prod_gw_addrs, prod_ioc_addrs
 from ..util import (caget_from_host, correct_gateway_pvinfo,
                     predict_gateway_response)
 
-HUTCHES = ['amo', 'rix', 'xpp', 'xcs', 'mfx', 'cxi', 'mec']
+HUTCHES = ['tmo', 'rix', 'xpp', 'xcs', 'mfx', 'cxi', 'mec']
 SUFFS = ['control', 'daq']
 CLIENT_HOSTS = [f'{hutch}-{suff}' for hutch in HUTCHES for suff in SUFFS]
+MAX_PV_CHECKS_PER_DEVICE = 1
+
 
 logger = logging.getLogger(__name__)
 config = PCDSConfiguration.instance()
@@ -106,11 +108,16 @@ def assert_cagets(pvname):
 @pytest.mark.parametrize("name", list(pvlists_by_happi_name))
 def test_happi_devices(name):
     pvlist = pvlists_by_happi_name[name]
+    pvs_checked = 0
     for pvname in pvlist:
         if pvname in missing_pvs:
             logger.warning(f'Skip {pvname}, missing from pvlists.')
             continue
         _, _, pvinfo = assert_cagets(pvname)
+        pvs_checked += 1
         if pvinfo.error == 'timeout':
             logger.warning(f'Skip rest of {name}, disconnected PV')
             break
+        if pvs_checked >= MAX_PV_CHECKS_PER_DEVICE:
+            break
+    assert pvs_checked > 0, f'Ran test for {name} without checking any PVs'
