@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import glob
 import json
 import pathlib
@@ -73,6 +74,13 @@ class HappiInfo(happi_plugin.HappiPluginResults):
     @property
     def pvlist(self):
         return list(self.record_to_metadata_keys)
+
+    def get_pvlist_by_key(self):
+        dct = collections.defaultdict(list)
+        for pvname, name_list in self.record_to_metadata_keys.items():
+            for name in name_list:
+                dct[name].append(pvname)
+        return dct
 
 
 class PCDSConfiguration:
