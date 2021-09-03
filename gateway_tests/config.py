@@ -26,7 +26,12 @@ def get_ioc_to_pvs() -> dict[str, tuple[str, str]]:
     iocdata = pathlib.Path("/cds/data/iocData")
     for pvlist in iocdata.glob("*/iocInfo/IOC.pvlist"):
         # Edge case: iocData aliases
-        if pvlist.parent.parent.is_symlink():
+        iocdir = pvlist.parent.parent
+        if iocdir.is_symlink():
+            continue
+        # Edge case: random "-old", ".old", ".old2" directories in iocData
+        iocname = iocdir.name
+        if '.' in iocname or iocname.endswith('old'):
             continue
         ioc_name = pvlist.parts[len(iocdata.parts)]
         with open(pvlist, "rt") as fp:
@@ -45,7 +50,7 @@ def get_pv_to_ioc() -> dict[str, str]:
     }
 
 
-IOCMANAGER_RE = re.compile(r"^.*id:.*'(\S+)', host: '(\S+)'.*$")
+IOCMANAGER_RE = re.compile(r"^.*id:.*'(\S+)', host: '(\S+)'.*dir: '(\S+)'.*$")
 
 
 def get_ioc_to_host() -> dict[str, str]:
@@ -58,7 +63,16 @@ def get_ioc_to_host() -> dict[str, str]:
             line = line.strip()
             match = IOCMANAGER_RE.match(line)
             if match:
-                iocname, hostname = match.groups()
+                identity, hostname, directory = match.groups()
+                dirpath = pathlib.Path(directory)
+                # Usually the id is the ioc name.
+                # Sometimes the engineer was sloppy, and it is not.
+                # In these cases, iocmanager only works if the given
+                # directory contains st.cmd
+                if (dirpath / 'st.cmd').exists():
+                    iocname = dirpath.name
+                else:
+                    iocname = identity
                 ioc_to_host[iocname] = hostname
     return ioc_to_host
 

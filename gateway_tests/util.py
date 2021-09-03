@@ -311,6 +311,10 @@ def predict_gateway_response(
     # With the subnet, we can determine which gateway rules are relevant.
     # Only the lowest down in each pvlist file is relevant.
     for match in config.gateway_config.get_matches(pvname).matches:
+        gateway_procname = os.path.basename(match.filename).split('.')[0]
+        # Edge case: people leaving old pvlists in the config
+        if gateway_procname.endswith('old'):
+            continue
         if match.rule.command == 'DENY':
             # DENY_FROM sends a NO_ACCESS
             if hostname in match.rule.hosts:
@@ -343,7 +347,6 @@ def predict_gateway_response(
                 'Programmer did not know that match.rule.command could be '
                 f'{match.rule.command}'
                 )
-        gateway_procname = os.path.basename(match.filename).split('.')[0]
         response = GatewayResponse(
             gateway_procname=gateway_procname,
             # TODO map gateway processes to hosts
