@@ -5,14 +5,15 @@ import pytest
 
 from ..compare import get_missing_pvs
 from ..config import PCDSConfiguration
-from ..conftest import find_pvinfo_differences, prod_gw_addrs, prod_ioc_addrs
+from ..conftest import (find_pvinfo_differences, interpret_pvinfo_differences,
+                        prod_gw_addrs, prod_ioc_addrs)
 from ..util import (caget_from_host, correct_gateway_pvinfo,
                     predict_gateway_response)
 
 HUTCHES = ['tmo', 'rix', 'xpp', 'xcs', 'mfx', 'cxi', 'mec']
 SUFFS = ['control', 'daq']
 CLIENT_HOSTS = [f'{hutch}-{suff}' for hutch in HUTCHES for suff in SUFFS]
-MAX_PV_CHECKS_PER_DEVICE = 1
+MAX_PV_CHECKS_PER_DEVICE = 100
 
 
 logger = logging.getLogger(__name__)
@@ -97,11 +98,7 @@ def compare_gets_all_reasonable_hosts(pvname):
 def assert_cagets(pvname):
     diffs, predicts, true_pvinfo = compare_gets_all_reasonable_hosts(pvname)
     for host, diff in diffs.items():
-        assert not diff, (
-            f'Unexpected difference (expected, actual) {diff} '
-            f'for caget {pvname} on host {host}. '
-            f'Gateway prediction was {predicts[host]}'
-        )
+        assert not diff, interpret_pvinfo_differences(diff)
     return diffs, predicts, true_pvinfo
 
 

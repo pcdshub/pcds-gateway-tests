@@ -26,7 +26,7 @@ import tempfile
 import textwrap
 import time
 from concurrent.futures import ProcessPoolExecutor
-from typing import Any, ContextManager, Generator, Optional, Protocol
+from typing import Any, ContextManager, Generator, Iterable, Optional, Protocol
 
 import epics
 import pytest
@@ -736,6 +736,65 @@ def find_pvinfo_differences(
             struct2={f'ctrl_{k}': v for k, v in pvinfo2_cmd.items()},
             skip_keys=skip_keys,
         )
+
+
+EPICS_EPOCH = 631152000.0
+
+
+def interpret_pvinfo_differences(
+    diff: Iterable[tuple[str, Any, Any]],
+    desc1: str = 'ioc',
+    desc2: str = 'gateway',
+) -> str:
+    """
+    Gives a string description of what the difference is.
+
+    Run this on the output of find_pvinfo_differences.
+    """
+    difflist = list(diff)
+
+    if not difflist:
+        return 'No differences.'
+
+    def inner_describe(key, val1, val2):
+        """
+        Get a stub description for a single difference.
+
+        Returns a tuple (description, bool)
+        If the bool is True, that means that the description
+        supercedes and replaces all other descriptions from the diff.
+        This helps pare down the "x did not equal y" descs when there
+        is a more fundamental issue.
+        """
+        if key == 'name':
+            return 'Comparing two unrelated PVs', True
+        if key == 'error':
+            if val1 == 'timeout':
+                return f'{desc1} PV timed out, but {desc2} responded', True
+            if val2 == 'timeout':
+                return f'{desc2} PV timed out, but {desc1} responded', True
+        if key == 'time_timestamp':
+            if val1 == EPICS_EPOCH:
+                return f'{desc1} PV had an invalid timestamp', False
+            if val2 == EPICS_EPOCH:
+                return f'{desc2} PV had an invalid timestamp', False
+            diff = abs(val1 - val2)
+            hours = diff/60/60
+            return f'There was a timestamp diff of {hours:.2f} hours', False
+        # Catch all for other issues
+        return f'{desc1} {key} == {val1}, but {desc2} {key} == {val2}', False
+
+    descs = []
+    for key, val1, val2 in difflist:
+        more_desc, end_analysis = inner_describe(key, val1, val2)
+        if end_analysis:
+            return more_desc.capitalize()
+        else:
+            descs.append(more_desc)
+
+    if len(descs) == 1:
+        return descs[0].capitalize()
+    return '. '.join([desc.capitalize() for desc in descs])
 
 
 @contextlib.contextmanager

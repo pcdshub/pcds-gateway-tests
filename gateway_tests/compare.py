@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import pathlib
 from typing import Optional
 
 from .config import PCDSConfiguration
