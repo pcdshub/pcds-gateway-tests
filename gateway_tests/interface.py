@@ -2,6 +2,7 @@
 Classes for understanding PCDS gateway interfaces.
 """
 import dataclasses
+import functools
 import pathlib
 import re
 import socket
@@ -105,12 +106,14 @@ class InterfaceConfig:
             if not info.mask:
                 del self.subnets[name]
 
+    @functools.lru_cache(maxsize=1000)
     def subnet_from_ip(self, ipaddr: str) -> str:
         for name, info in self.subnets.items():
             if info.contains_ip(ipaddr):
                 return name
         raise ValueError(f'Recieved non-pcds ip address {ipaddr}')
 
+    @functools.lru_cache(maxsize=1000)
     def subnet_from_hostname(self, hostname: str) -> str:
         ipaddr = socket.gethostbyname(hostname)
         return self.subnet_from_ip(ipaddr)

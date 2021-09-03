@@ -94,5 +94,13 @@ def compare_gets_all_reasonable_hosts(pvname):
 def assert_cagets(pvname):
     diffs, predicts, true_pvinfo = compare_gets_all_reasonable_hosts(pvname)
     for host, diff in diffs.items():
-        assert not diff, interpret_pvinfo_differences(diff)
+        assert not diff, interpret_pvinfo_differences(diff, pvname)
     return diffs, predicts, true_pvinfo
+
+
+def get_extra_pvs(pvlist):
+    extra_pvs = []
+    for pvname in pvlist:
+        if pvname.endswith(':ArrayData'):
+            extra_pvs.append(f'{pvname}.NORD')
+    return extra_pvs

@@ -743,6 +743,7 @@ EPICS_EPOCH = 631152000.0
 
 def interpret_pvinfo_differences(
     diff: Iterable[tuple[str, Any, Any]],
+    pvname: str,
     desc1: str = 'ioc',
     desc2: str = 'gateway',
 ) -> str:
@@ -759,38 +760,31 @@ def interpret_pvinfo_differences(
     def inner_describe(key, val1, val2):
         """
         Get a stub description for a single difference.
-
-        Returns a tuple (description, bool)
-        If the bool is True, that means that the description
-        supercedes and replaces all other descriptions from the diff.
-        This helps pare down the "x did not equal y" descs when there
-        is a more fundamental issue.
         """
         if key == 'name':
-            return 'Comparing two unrelated PVs', True
+            return 'Comparing two unrelated PVs'
         if key == 'error':
             if val1 == 'timeout':
-                return f'{desc1} PV timed out, but {desc2} responded', True
+                return f'{desc1} PV {pvname} timed out, but {desc2} responded'
             if val2 == 'timeout':
-                return f'{desc2} PV timed out, but {desc1} responded', True
+                return f'{desc2} PV {pvname} timed out, but {desc1} responded'
         if key == 'time_timestamp':
             if val1 == EPICS_EPOCH:
-                return f'{desc1} PV had an invalid timestamp', False
+                return f'{desc1} PV {pvname} had an invalid timestamp'
             if val2 == EPICS_EPOCH:
-                return f'{desc2} PV had an invalid timestamp', False
+                return f'{desc2} PV {pvname} had an invalid timestamp'
             diff = abs(val1 - val2)
             hours = diff/60/60
-            return f'There was a timestamp diff of {hours:.2f} hours', False
+            return (f'for {pvname} there was a timestamp '
+                    f'diff of {hours:.2f} hours')
         # Catch all for other issues
-        return f'{desc1} {key} == {val1}, but {desc2} {key} == {val2}', False
+        return (f'For {pvname}, {desc1} {key} == {val1}, '
+                f'but {desc2} {key} == {val2}')
 
     descs = []
     for key, val1, val2 in difflist:
-        more_desc, end_analysis = inner_describe(key, val1, val2)
-        if end_analysis:
-            return more_desc.capitalize()
-        else:
-            descs.append(more_desc)
+        more_desc = inner_describe(key, val1, val2)
+        descs.append(more_desc)
 
     if len(descs) == 1:
         return descs[0].capitalize()
