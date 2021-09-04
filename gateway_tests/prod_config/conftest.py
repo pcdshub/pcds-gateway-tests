@@ -16,6 +16,7 @@ CLIENT_HOSTS = [f'{hutch}-{suff}' for hutch in HUTCHES for suff in SUFFS]
 
 logger = logging.getLogger(__name__)
 config = PCDSConfiguration.instance()
+our_host = socket.gethostname()
 
 
 def compare_gets(pvname: str, hosts: list[str], skip_disconnected=False):
@@ -31,7 +32,7 @@ def compare_gets(pvname: str, hosts: list[str], skip_disconnected=False):
 
     with prod_ioc_addrs(config):
         true_pvinfo = caget_from_host(
-            hostname=socket.gethostname(),
+            hostname=our_host,
             pvname=pvname,
         )
     if skip_disconnected and true_pvinfo.error == 'timeout':
@@ -44,7 +45,7 @@ def compare_gets(pvname: str, hosts: list[str], skip_disconnected=False):
             )
     with prod_ioc_addrs(config):
         post_pvinfo = caget_from_host(
-            hostname=socket.gethostname(),
+            hostname=our_host,
             pvname=pvname,
         )
     sanity_diff = {
@@ -80,7 +81,7 @@ def compare_gets(pvname: str, hosts: list[str], skip_disconnected=False):
     return all_diffs, all_predicts, true_pvinfo
 
 
-def compare_gets_all_reasonable_hosts(pvname):
+def compare_gets_all_reasonable_hosts(pvname, skip_disconnected=False):
     # Try every host except the ones that pvname shares subnet with
     iocname = config.pv_to_ioc[pvname]
     hostname = config.ioc_to_host[iocname]
@@ -90,11 +91,14 @@ def compare_gets_all_reasonable_hosts(pvname):
         host for host in CLIENT_HOSTS
         if pv_subnet != config.interface_config.subnet_from_hostname(host)
     ]
-    return compare_gets(pvname, hosts)
+    return compare_gets(pvname, hosts, skip_disconnected=skip_disconnected)
 
 
-def assert_cagets(pvname):
-    diffs, predicts, true_pvinfo = compare_gets_all_reasonable_hosts(pvname)
+def assert_cagets(pvname, skip_disconnected=False):
+    diffs, predicts, true_pvinfo = compare_gets_all_reasonable_hosts(
+        pvname,
+        skip_disconnected=skip_disconnected,
+        )
     for host, diff in diffs.items():
         assert not diff, interpret_pvinfo_differences(diff, pvname)
     return diffs, predicts, true_pvinfo
