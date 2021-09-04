@@ -37,4 +37,4 @@ extra_pvs = get_extra_pvs(pvlist)
 
 @pytest.mark.parametrize("pvname", pvlist + extra_pvs)
 def test_subnet_pvs(pvname):
-    assert_cagets(pvname)
+    assert_cagets(pvname, skip_disconnected=True)

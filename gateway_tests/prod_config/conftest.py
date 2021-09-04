@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 config = PCDSConfiguration.instance()
 
 
-def compare_gets(pvname: str, hosts: list[str]):
+def compare_gets(pvname: str, hosts: list[str], skip_disconnected=False):
     """
     Check if the gateway gives us the correct value.
 
@@ -34,6 +34,8 @@ def compare_gets(pvname: str, hosts: list[str]):
             hostname=socket.gethostname(),
             pvname=pvname,
         )
+    if skip_disconnected and true_pvinfo.error == 'timeout':
+        return
     with prod_gw_addrs(config):
         for host in hosts:
             gw_pvinfo[host] = caget_from_host(
