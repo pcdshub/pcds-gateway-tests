@@ -723,8 +723,8 @@ def find_pvinfo_differences(
     )
     if 'time_md' not in skip_keys:
         # Can be dict or None, make it dict
-        pvinfo1_tmd = pvinfo1.time_md or {}
-        pvinfo2_tmd = pvinfo2.time_md or {}
+        pvinfo1_tmd = pvinfo1.time_md or defaultdict(lambda: None)
+        pvinfo2_tmd = pvinfo2.time_md or defaultdict(lambda: None)
         yield from find_differences(
             struct1={f'time_{k}': v for k, v in pvinfo1_tmd.items()},
             struct2={f'time_{k}': v for k, v in pvinfo2_tmd.items()},
@@ -732,8 +732,8 @@ def find_pvinfo_differences(
         )
     if 'control_md' not in skip_keys:
         # Can be dict or None, make it dict
-        pvinfo1_cmd = pvinfo1.control_md or {}
-        pvinfo2_cmd = pvinfo2.control_md or {}
+        pvinfo1_cmd = pvinfo1.control_md or defaultdict(lambda: None)
+        pvinfo2_cmd = pvinfo2.control_md or defaultdict(lambda: None)
         yield from find_differences(
             struct1={f'ctrl_{k}': v for k, v in pvinfo1_cmd.items()},
             struct2={f'ctrl_{k}': v for k, v in pvinfo2_cmd.items()},
