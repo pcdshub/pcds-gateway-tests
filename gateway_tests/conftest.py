@@ -744,8 +744,8 @@ EPICS_EPOCH = 631152000.0
 def interpret_pvinfo_differences(
     diff: Iterable[tuple[str, Any, Any]],
     pvname: str,
-    desc1: str = 'ioc',
-    desc2: str = 'gateway',
+    desc1: str = 'IOC',
+    desc2: str = 'Gateway',
 ) -> str:
     """
     Gives a string description of what the difference is.
@@ -775,7 +775,7 @@ def interpret_pvinfo_differences(
                 return f'{desc2} PV {pvname} had an invalid timestamp'
             diff = abs(val1 - val2)
             hours = diff/60/60
-            return (f'for {pvname} there was a timestamp '
+            return (f'For {pvname} there was a timestamp '
                     f'diff of {hours:.2f} hours')
         # Catch all for other issues
         return (f'For {pvname}, {desc1} {key} == {val1}, '
@@ -787,8 +787,8 @@ def interpret_pvinfo_differences(
         descs.append(more_desc)
 
     if len(descs) == 1:
-        return descs[0].capitalize()
-    return '. '.join([desc.capitalize() for desc in descs])
+        return descs[0]
+    return '. '.join([desc for desc in descs])
 
 
 @contextlib.contextmanager

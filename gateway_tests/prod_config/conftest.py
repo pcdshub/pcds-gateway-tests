@@ -3,6 +3,9 @@ Test fixtures and utilities specific to prod testing
 """
 import logging
 import socket
+import subprocess
+
+import pytest
 
 from ..config import PCDSConfiguration
 from ..conftest import (find_pvinfo_differences, interpret_pvinfo_differences,
@@ -17,6 +20,32 @@ CLIENT_HOSTS = [f'{hutch}-{suff}' for hutch in HUTCHES for suff in SUFFS]
 logger = logging.getLogger(__name__)
 config = PCDSConfiguration.instance()
 our_host = socket.gethostname()
+disconnected_iocs = set()
+online_hosts = set()
+offline_hosts = set()
+
+
+def maybe_skip_host(hostname):
+    skip = False
+    if hostname in offline_hosts:
+        skip = True
+    elif hostname in online_hosts:
+        return
+    else:
+        skip = not ping(hostname)
+    if skip:
+        offline_hosts.add(hostname)
+        pytest.skip(f'Host {hostname} is offline.')
+    else:
+        online_hosts.add(hostname)
+
+
+def ping(hostname):
+    return subprocess.call(['ping', '-c', '1', str(hostname)]) == 0
+
+
+class DisconnectedError(Exception):
+    ...
 
 
 def compare_gets(pvname: str, hosts: list[str], skip_disconnected=False):
@@ -36,7 +65,7 @@ def compare_gets(pvname: str, hosts: list[str], skip_disconnected=False):
             pvname=pvname,
         )
     if skip_disconnected and true_pvinfo.error == 'timeout':
-        return
+        raise DisconnectedError(f'{pvname} is disconnected. Aborting.')
     with prod_gw_addrs(config):
         for host in hosts:
             gw_pvinfo[host] = caget_from_host(
@@ -81,9 +110,14 @@ def compare_gets(pvname: str, hosts: list[str], skip_disconnected=False):
     return all_diffs, all_predicts, true_pvinfo
 
 
+def get_iocname(pvname):
+    base_pvname = pvname.split('.')[0]
+    return config.pv_to_ioc[base_pvname]
+
+
 def compare_gets_all_reasonable_hosts(pvname, skip_disconnected=False):
     # Try every host except the ones that pvname shares subnet with
-    iocname = config.pv_to_ioc[pvname]
+    iocname = get_iocname(pvname)
     hostname = config.ioc_to_host[iocname]
     pv_subnet = config.interface_config.subnet_from_hostname(hostname)
 
@@ -95,10 +129,28 @@ def compare_gets_all_reasonable_hosts(pvname, skip_disconnected=False):
 
 
 def assert_cagets(pvname, skip_disconnected=False):
-    diffs, predicts, true_pvinfo = compare_gets_all_reasonable_hosts(
-        pvname,
-        skip_disconnected=skip_disconnected,
-        )
+    if skip_disconnected:
+        try:
+            iocname = get_iocname(pvname)
+        except KeyError:
+            iocname = None
+        if iocname in disconnected_iocs:
+            pytest.skip(f'IOC {iocname} is disconnected.')
+        try:
+            hostname = config.ioc_to_host[iocname]
+        except KeyError:
+            hostname = None
+        maybe_skip_host(hostname)
+    try:
+        diffs, predicts, true_pvinfo = compare_gets_all_reasonable_hosts(
+            pvname,
+            skip_disconnected=skip_disconnected,
+            )
+    except DisconnectedError:
+        if skip_disconnected:
+            if iocname is not None:
+                disconnected_iocs.add(iocname)
+            pytest.skip(f'PV {pvname} is disconnected.')
     for host, diff in diffs.items():
         assert not diff, interpret_pvinfo_differences(diff, pvname)
     return diffs, predicts, true_pvinfo

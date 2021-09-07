@@ -19,7 +19,12 @@ except Exception:
     subnets = []
     logger.error(f'Issues with env variable {ENV_VAR}')
 
-if subnets:
+if 'test_the_tests' in subnets:
+    pvlist = [
+        'IM1K0:XTES:MMS',
+        'IM1K0:XTES:CAM:IMAGE1:ArrayData',
+    ]
+elif subnets:
     pvlist = []
     for pvname, iocname in config.pv_to_ioc.items():
         try:
