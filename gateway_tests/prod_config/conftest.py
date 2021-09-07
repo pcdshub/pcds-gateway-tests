@@ -4,12 +4,14 @@ Test fixtures and utilities specific to prod testing
 import logging
 import socket
 import subprocess
+import time
+import uuid
 
 import pytest
 
 from ..config import PCDSConfiguration
 from ..conftest import (find_pvinfo_differences, interpret_pvinfo_differences,
-                        prod_gw_addrs, prod_ioc_addrs)
+                        prod_gw_addrs, prod_ioc_addrs, pvinfo_diff_report)
 from ..util import (caget_from_host, correct_gateway_pvinfo,
                     predict_gateway_response)
 
@@ -162,3 +164,10 @@ def get_extra_pvs(pvlist):
         if pvname.endswith(':ArrayData'):
             extra_pvs.append(f'{pvname}.NORD')
     return extra_pvs
+
+
+@pytest.fixture(scope='module')
+def diff_report():
+    yield
+    filename = f'diff_report_{int(time.time())}_{str(uuid.uuid4())[-8:]}'
+    pvinfo_diff_report(config, filename)

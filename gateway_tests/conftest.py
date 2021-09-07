@@ -16,7 +16,9 @@ Environment variables used:
 
 import contextlib
 import dataclasses
+import enum
 import functools
+import json
 import logging
 import math
 import os
@@ -25,6 +27,7 @@ import subprocess
 import tempfile
 import textwrap
 import time
+from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from typing import Any, ContextManager, Generator, Iterable, Optional, Protocol
 
@@ -739,6 +742,34 @@ def find_pvinfo_differences(
 
 
 EPICS_EPOCH = 631152000.0
+PVINFO_DIFF_CACHE = defaultdict(list)
+
+
+class PVInfoDiff(enum.Enum):
+    OTHER = 0
+    TIMEOUT = 1
+    INVALID_TIMESTAMP = 2
+    INCORRECT_TIMESTAMP = 3
+    VALUE = 4
+    METADATA = 5
+
+
+def cache_diff(pvname, category):
+    PVINFO_DIFF_CACHE[pvname].append(category)
+
+
+def pvinfo_diff_report(config, output_filename):
+    """
+    Basic report on the PVINFO_DIFF_CACHE
+
+    Count up the error modes and write a human-readable file.
+    """
+    counts = defaultdict(int)
+    for diffs in PVINFO_DIFF_CACHE.values():
+        for diff_type in diffs:
+            counts[diff_type.name] += 1
+    with open(output_filename, 'w') as fd:
+        json.dump(counts, fd)
 
 
 def interpret_pvinfo_differences(
@@ -762,22 +793,32 @@ def interpret_pvinfo_differences(
         Get a stub description for a single difference.
         """
         if key == 'name':
+            cache_diff(pvname, PVInfoDiff.OTHER)
             return 'Comparing two unrelated PVs'
         if key == 'error':
             if val1 == 'timeout':
+                cache_diff(pvname, PVInfoDiff.TIMEOUT)
                 return f'{desc1} PV {pvname} timed out, but {desc2} responded'
             if val2 == 'timeout':
+                cache_diff(pvname, PVInfoDiff.TIMEOUT)
                 return f'{desc2} PV {pvname} timed out, but {desc1} responded'
         if key == 'time_timestamp':
             if val1 == EPICS_EPOCH:
+                cache_diff(pvname, PVInfoDiff.INVALID_TIMESTAMP)
                 return f'{desc1} PV {pvname} had an invalid timestamp'
             if val2 == EPICS_EPOCH:
+                cache_diff(pvname, PVInfoDiff.INVALID_TIMESTAMP)
                 return f'{desc2} PV {pvname} had an invalid timestamp'
             diff = abs(val1 - val2)
             hours = diff/60/60
+            cache_diff(pvname, PVInfoDiff.INCORRECT_TIMESTAMP)
             return (f'For {pvname} there was a timestamp '
                     f'diff of {hours:.2f} hours')
         # Catch all for other issues
+        if key == 'value':
+            cache_diff(pvname, PVInfoDiff.VALUE)
+        else:
+            cache_diff(pvname, PVInfoDiff.METADATA)
         return (f'For {pvname}, {desc1} {key} == {val1}, '
                 f'but {desc2} {key} == {val2}')
 
