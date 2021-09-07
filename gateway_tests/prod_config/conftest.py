@@ -169,5 +169,5 @@ def get_extra_pvs(pvlist):
 @pytest.fixture(scope='module')
 def diff_report():
     yield
-    filename = f'diff_report_{int(time.time())}_{str(uuid.uuid4())[-8:]}'
+    filename = f'diff_report_{int(time.time())}_{str(uuid.uuid4())[-8:]}.json'
     pvinfo_diff_report(config, filename)
