@@ -384,6 +384,8 @@ def custom_environment(
     db_file: Optional[str] = test_ioc_db,
     dbd_file: Optional[str] = None,
     encoding: str = "latin-1",
+    ioc_args: Optional[list[str]] = None,
+    gateway_args: Optional[list[str]] = None,
 ):
     """
     Run a gateway and an IOC in a custom environment, specifying the raw
@@ -408,6 +410,8 @@ def custom_environment(
         Path to the IOC database definition.  Defaults to using the database
         definition provided with epics-base/softIoc.
     """
+    gateway_args = gateway_args or []
+    ioc_args = ioc_args or []
     with tempfile.NamedTemporaryFile() as access_fp:
         access_fp.write(textwrap.dedent(access_contents).encode(encoding))
         access_fp.flush()
@@ -429,14 +433,14 @@ def custom_environment(
 
                 logger.info(
                     "Access rights:\n%s",
-                    textwrap.indent(access_contents, '    ')
+                    textwrap.indent(textwrap.dedent(access_contents), '    ')
                 )
                 logger.info(
                     "PVList:\n%s",
-                    textwrap.indent(pvlist_contents, '    ')
+                    textwrap.indent(textwrap.dedent(pvlist_contents), '    ')
                 )
-                with run_gateway(access=access_fp.name, pvlist=pvlist_fp.name):
-                    with run_ioc(db_file=dbfile_fp.name, dbd_file=dbd_file):
+                with run_gateway(*gateway_args, access=access_fp.name, pvlist=pvlist_fp.name):
+                    with run_ioc(*ioc_args, db_file=dbfile_fp.name, dbd_file=dbd_file):
                         with local_channel_access():
                             yield
 
@@ -1117,3 +1121,31 @@ def prod_ioc_addrs(config: PCDSConfiguration):
          if subnet not in ('dev', 'srv')]
     ):
         yield
+
+
+def pyepics_caput(
+    pvname: str,
+    value: Any,
+    timeout: float = 0.5,
+) -> None:
+    """
+    Use low-level pyepics.ca to put data to a PV.
+
+    Parameters
+    ----------
+    pvname : str
+        The PV name.
+
+    value :
+        The value to put.
+
+    timeout : float, optional
+        Timeout in seconds.
+    """
+    chid = epics.ca.create_channel(pvname)
+    try:
+        connected = epics.ca.connect_channel(chid, timeout=timeout)
+        assert connected, f"Could not connect to channel: {pvname}"
+        epics.ca.put(chid, value, timeout=timeout)
+    finally:
+        epics.ca.clear_channel(chid)
