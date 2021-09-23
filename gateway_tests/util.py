@@ -1,13 +1,17 @@
 import contextlib
 import dataclasses
+import enum
 import getpass
 import logging
+import os.path
 import socket
 from typing import Any, Optional
 
 import caproto
 import caproto.sync.client as ca_client
 import numpy as np
+
+from .config import PCDSConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -197,3 +201,261 @@ def caget_many_from_host(hostname, *pvnames):
         "hostname": hostname,
         "pvs": results,
     }
+
+
+class AccessBehavior(enum.IntEnum):
+    AMBIGUOUS = 0
+    NO_ACCESS = 1
+    DISCONNECTED = 2
+    READ = 3
+    WRITE = 4
+
+
+def interpret_access(access):
+    try:
+        return AccessBehavior(access)
+    except ValueError:
+        pass
+    try:
+        return AccessBehavior[access]
+    except KeyError:
+        pass
+    if access.startswith('WRITE'):
+        return AccessBehavior.WRITE
+    raise ValueError(f'Could not interpret {access} as an AccessBehavior.')
+
+
+def promote_access(current, new):
+    current = interpret_access(current)
+    new = interpret_access(new)
+    if new > current:
+        return new
+    else:
+        return current
+
+
+def demote_access(current, new):
+    current = interpret_access(current)
+    new = interpret_access(new)
+    if new < current:
+        return new
+    else:
+        return current
+
+
+@dataclasses.dataclass
+class GatewayResponse:
+    """
+    How one particular gateway should respond to a request.
+    """
+    gateway_procname: str
+    gateway_hostname: str
+    client_hostname: str
+    pvname: str
+    access: AccessBehavior
+
+
+@dataclasses.dataclass
+class GatewayResponseSummary(GatewayResponse):
+    """
+    How the gateway network should respond to a request.
+
+    Contains the dominating gateway information if unambiguous.
+    If access is AccessBehavior.AMBIGUOUS, then two gateways
+    will respond! As such, any ambiguous fields will be
+    empty strings and you'll need to investigate the responses
+    list.
+    """
+    subnet_responses: dict[str, GatewayResponse]
+    other_responses: dict[str, GatewayResponse]
+
+
+def predict_gateway_response(
+    config: PCDSConfiguration,
+    pvname: str,
+    hostname: str,
+) -> GatewayResponseSummary:
+    """
+    Predict how the gateways should respond to a request.
+
+    Parameters
+    ----------
+    config : PCDSConfiguration
+        All of the configuration info about the deployed environment.
+    pvname : str
+        The PV name to check the rules for.
+    hostname : str
+        The hostname we make the request from.
+
+    Returns
+    -------
+    summary : GatewayResponseSummary
+        Contains the relevant rules, metadata, and results for
+        the request.
+    """
+    # Collect the responses from each gateway
+    subnet_responses = {}
+    other_responses = {}
+
+    # First, we need to know which subnet the PV is on.
+    try:
+        ioc_name = config.pv_to_ioc[pvname.split('.')[0]]
+    except KeyError:
+        raise ValueError(f'Did not find ioc name to match PV {pvname}')
+    try:
+        pv_hostname = config.ioc_to_host[ioc_name]
+    except KeyError:
+        raise ValueError(f'Did not find hostname to match ioc {ioc_name}')
+    subnet = config.interface_config.subnet_from_hostname(pv_hostname)
+
+    # With the subnet, we can determine which gateway rules are relevant.
+    # Only the lowest down in each pvlist file is relevant.
+    for match in config.gateway_config.get_matches(pvname).matches:
+        gateway_procname = os.path.basename(match.filename).split('.')[0]
+        # Edge case: people leaving old pvlists in the config
+        if gateway_procname.endswith('old'):
+            continue
+        if match.rule.command == 'DENY':
+            # DENY_FROM sends a NO_ACCESS
+            if hostname in match.rule.hosts:
+                access = AccessBehavior.NO_ACCESS
+            # DENY pretends like the PV is disconnected
+            else:
+                access = AccessBehavior.DISCONNECTED
+        elif match.rule.command == 'ALLOW':
+            # Default behavior is read-only
+            if match.rule.access is None:
+                access = AccessBehavior.READ
+            else:
+                access_group = config.access_security.groups[
+                    match.rule.access.group
+                ]
+                access = AccessBehavior.DISCONNECTED
+                for rule in access_group.rules:
+                    if rule.hosts is None:
+                        access = promote_access(access, rule.options)
+                    else:
+                        hosts = set()
+                        for host_group in rule.hosts:
+                            hosts.update(
+                                config.access_security.hosts[host_group].hosts
+                            )
+                        if hostname in hosts:
+                            access = promote_access(access, rule.options)
+        else:
+            raise NotImplementedError(
+                'Programmer did not know that match.rule.command could be '
+                f'{match.rule.command}'
+                )
+        response = GatewayResponse(
+            gateway_procname=gateway_procname,
+            # TODO map gateway processes to hosts
+            gateway_hostname='',
+            client_hostname=hostname,
+            pvname=pvname,
+            access=access,
+        )
+        # Overwrite any previous rules from that file
+        # Only the last rule matters!
+        if gateway_procname.startswith(subnet):
+            subnet_responses[gateway_procname] = response
+        else:
+            other_responses[gateway_procname] = response
+
+    # OK, now we combine our responses and predict the overall result.
+    # Focus only on subnet_responses, but keep other_responses for debug.
+    # We must have one or zero of READ, WRITE, and NO_ACCESS
+    # If we have two or more, this is ambiguous.
+    # If we have zero, the overall access is disconnected.
+    connected_responses = [
+        response for response in subnet_responses.values()
+        if response.access != AccessBehavior.DISCONNECTED
+    ]
+    # First case: all disconnected.
+    if len(connected_responses) == 0:
+        chosen_gwproc = ''
+        chosen_gwhost = ''
+        overall_access = AccessBehavior.DISCONNECTED
+    # Second case: only one option
+    elif len(connected_responses) == 1:
+        chosen_gwproc = connected_responses[0].gateway_procname
+        chosen_gwhost = connected_responses[0].gateway_hostname
+        overall_access = connected_responses[0].access
+    # Last case: more than one option
+    else:
+        chosen_gwproc = ''
+        chosen_gwhost = ''
+        overall_access = AccessBehavior.AMBIGUOUS
+
+    return GatewayResponseSummary(
+        gateway_procname=chosen_gwproc,
+        gateway_hostname=chosen_gwhost,
+        client_hostname=hostname,
+        pvname=pvname,
+        access=overall_access,
+        subnet_responses=subnet_responses,
+        other_responses=other_responses,
+    )
+
+
+def correct_gateway_pvinfo(
+    response_summary: GatewayResponseSummary,
+    pvinfo: PVInfo
+) -> PVInfo:
+    """
+    Determine what the gateway should have give, relative to what the IOC gave us.
+
+    This should be mostly the same, but potentially with a modified access field
+    or possibly disconnected.
+
+    Parameters
+    ----------
+    response_summary : GatewayResponseSummary
+        A summary of the gateway should behave for a specific PV.
+    pvinfo : PVInfo
+        The pv info retrieved from the IOC.
+
+    Returns
+    -------
+    gwinfo : PVInfo
+        The pv info we should see from the gateway if all is well. Note that this
+        will not fill in the pvinfo address field for the gateway.
+    """
+    # If we timed out, the gateway should also time out
+    if pvinfo.error == 'timeout':
+        return pvinfo
+
+    # Otherwise, we need to determine which access rules apply.
+    # Handle the AMBIGUOUS, NO_ACCESS, and DISCONNECTED states first
+    if response_summary.access == AccessBehavior.AMBIGUOUS:
+        raise RuntimeError('Ambiguous access behavior!')
+    if response_summary.access == AccessBehavior.NO_ACCESS:
+        return PVInfo(
+            name=pvinfo.name,
+            access='NO_ACCESS',
+        )
+    if response_summary.access == AccessBehavior.DISCONNECTED:
+        return PVInfo(
+            name=pvinfo.name,
+            error='timeout',
+        )
+
+    # The gateway should serve our PV!
+    # Demote our original access level if needed
+    new_access = demote_access(pvinfo.access, response_summary.access)
+    if new_access == AccessBehavior.WRITE:
+        access_str = 'WRITE|READ'
+    else:
+        access_str = new_access.name
+
+    # Omit the gateway address- not in scope here
+    return PVInfo(
+        name=pvinfo.name,
+        access=access_str,
+        data_type=pvinfo.data_type,
+        data_count=pvinfo.data_count,
+        value=pvinfo.value,
+        error=pvinfo.error,
+        time_md=pvinfo.time_md,
+        control_md=pvinfo.control_md,
+    )

@@ -15,21 +15,28 @@ Environment variables used:
 """
 
 import contextlib
+import dataclasses
+import enum
 import functools
+import json
 import logging
 import math
 import os
-import pathlib
 import shutil
 import subprocess
 import tempfile
 import textwrap
 import time
+from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
-from typing import Any, ContextManager, Generator, Optional, Protocol
+from typing import Any, ContextManager, Generator, Iterable, Optional, Protocol
 
 import epics
 import pytest
+
+from .config import PCDSConfiguration
+from .constants import MODULE_PATH, PCDS_ACCESS
+from .util import PVInfo
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +45,6 @@ libca_so = os.path.join(
 )
 if "PYEPICS_LIBCA" not in os.environ and os.path.exists(libca_so):
     os.environ["PYEPICS_LIBCA"] = libca_so
-
-MODULE_PATH = pathlib.Path(__file__).parent.resolve()
 
 # CA ports to use
 default_ioc_port = 12782
@@ -54,7 +59,7 @@ test_ioc_db = os.environ.get(
     "TEST_DB", str(MODULE_PATH / "process" / "test.db")
 )
 site_access = os.environ.get(
-    "GATEWAY_SITE_ACCESS", "/cds/group/pcds/gateway/config/pcds-access.acf"
+    "GATEWAY_SITE_ACCESS", str(PCDS_ACCESS)
 )
 
 verbose = os.environ.get("VERBOSE", "").lower().startswith("y")
@@ -701,6 +706,136 @@ def compare_structures(struct1, struct2, desc1="Gateway", desc2="IOC") -> str:
     return "\n\t".join(differences)
 
 
+def find_pvinfo_differences(
+    pvinfo1: PVInfo,
+    pvinfo2: PVInfo,
+    skip_keys: Optional[list[str]] = None,
+) -> Generator[tuple[str, Any, Any], None, None]:
+    """
+    Find the differences between two PVInfo dataclasses.
+    """
+    if skip_keys is None:
+        skip_keys = ['address']
+
+    struct1 = dataclasses.asdict(pvinfo1)
+    struct2 = dataclasses.asdict(pvinfo2)
+
+    yield from find_differences(
+        struct1=struct1,
+        struct2=struct2,
+        skip_keys=skip_keys + ['time_md', 'control_md'],
+    )
+    if 'time_md' not in skip_keys:
+        # Can be dict or None, make it dict
+        pvinfo1_tmd = pvinfo1.time_md or defaultdict(lambda: None)
+        pvinfo2_tmd = pvinfo2.time_md or defaultdict(lambda: None)
+        yield from find_differences(
+            struct1={f'time_{k}': v for k, v in pvinfo1_tmd.items()},
+            struct2={f'time_{k}': v for k, v in pvinfo2_tmd.items()},
+            skip_keys=skip_keys,
+        )
+    if 'control_md' not in skip_keys:
+        # Can be dict or None, make it dict
+        pvinfo1_cmd = pvinfo1.control_md or defaultdict(lambda: None)
+        pvinfo2_cmd = pvinfo2.control_md or defaultdict(lambda: None)
+        yield from find_differences(
+            struct1={f'ctrl_{k}': v for k, v in pvinfo1_cmd.items()},
+            struct2={f'ctrl_{k}': v for k, v in pvinfo2_cmd.items()},
+            skip_keys=skip_keys,
+        )
+
+
+EPICS_EPOCH = 631152000.0
+PVINFO_DIFF_CACHE = defaultdict(list)
+
+
+class PVInfoDiff(enum.Enum):
+    OTHER = 0
+    TIMEOUT = 1
+    INVALID_TIMESTAMP = 2
+    INCORRECT_TIMESTAMP = 3
+    VALUE = 4
+    METADATA = 5
+
+
+def cache_diff(pvname, category):
+    PVINFO_DIFF_CACHE[pvname].append(category)
+
+
+def pvinfo_diff_report(config, output_filename):
+    """
+    Basic report on the PVINFO_DIFF_CACHE
+
+    Count up the error modes and write a human-readable file.
+    """
+    counts = defaultdict(int)
+    for diffs in PVINFO_DIFF_CACHE.values():
+        for diff_type in diffs:
+            counts[diff_type.name] += 1
+    with open(output_filename, 'w') as fd:
+        json.dump(counts, fd)
+
+
+def interpret_pvinfo_differences(
+    diff: Iterable[tuple[str, Any, Any]],
+    pvname: str,
+    desc1: str = 'IOC',
+    desc2: str = 'Gateway',
+) -> str:
+    """
+    Gives a string description of what the difference is.
+
+    Run this on the output of find_pvinfo_differences.
+    """
+    difflist = list(diff)
+
+    if not difflist:
+        return 'No differences.'
+
+    def inner_describe(key, val1, val2):
+        """
+        Get a stub description for a single difference.
+        """
+        if key == 'name':
+            cache_diff(pvname, PVInfoDiff.OTHER)
+            return 'Comparing two unrelated PVs'
+        if key == 'error':
+            if val1 == 'timeout':
+                cache_diff(pvname, PVInfoDiff.TIMEOUT)
+                return f'{desc1} PV {pvname} timed out, but {desc2} responded'
+            if val2 == 'timeout':
+                cache_diff(pvname, PVInfoDiff.TIMEOUT)
+                return f'{desc2} PV {pvname} timed out, but {desc1} responded'
+        if key == 'time_timestamp':
+            if val1 == EPICS_EPOCH:
+                cache_diff(pvname, PVInfoDiff.INVALID_TIMESTAMP)
+                return f'{desc1} PV {pvname} had an invalid timestamp'
+            if val2 == EPICS_EPOCH:
+                cache_diff(pvname, PVInfoDiff.INVALID_TIMESTAMP)
+                return f'{desc2} PV {pvname} had an invalid timestamp'
+            diff = abs(val1 - val2)
+            hours = diff/60/60
+            cache_diff(pvname, PVInfoDiff.INCORRECT_TIMESTAMP)
+            return (f'For {pvname} there was a timestamp '
+                    f'diff of {hours:.2f} hours')
+        # Catch all for other issues
+        if key == 'value':
+            cache_diff(pvname, PVInfoDiff.VALUE)
+        else:
+            cache_diff(pvname, PVInfoDiff.METADATA)
+        return (f'For {pvname}, {desc1} {key} == {val1}, '
+                f'but {desc2} {key} == {val2}')
+
+    descs = []
+    for key, val1, val2 in difflist:
+        more_desc = inner_describe(key, val1, val2)
+        descs.append(more_desc)
+
+    if len(descs) == 1:
+        return descs[0]
+    return '. '.join([desc for desc in descs])
+
+
 @contextlib.contextmanager
 def ca_subscription(
     pvname: str,
@@ -926,6 +1061,66 @@ def pyepics_caget_pair(
             timeout=timeout,
         ),
     )
+
+
+@contextlib.contextmanager
+def prod_addr_list(config: PCDSConfiguration, subnets: list[str]):
+    """
+    Context manager for limited broadcasts in prod tests.
+
+    This only works while on a gateway host.
+
+    Sets the following environment variables:
+    EPICS_CA_ADDR_LIST based on the subnets chosen
+    EPICS_CA_AUTO_ADDR_LIST to NO
+
+    And restores them after the context expires.
+    """
+    ADDR_LIST = 'EPICS_CA_ADDR_LIST'
+    AUTO_ADDR = 'EPICS_CA_AUTO_ADDR_LIST'
+    old_addr_list = os.environ.get(ADDR_LIST, None)
+    old_auto_addr = os.environ.get(AUTO_ADDR, None)
+
+    broadcast_addrs = [
+        config.interface_config.subnets[subnet].bcaddr for subnet in subnets
+    ]
+    os.environ[ADDR_LIST] = ' '.join(broadcast_addrs)
+    os.environ[AUTO_ADDR] = 'NO'
+    yield
+    if old_addr_list is None:
+        del os.environ[ADDR_LIST]
+    else:
+        os.environ[ADDR_LIST] = old_addr_list
+    if old_auto_addr is None:
+        del os.environ[AUTO_ADDR]
+    else:
+        os.environ[AUTO_ADDR] = old_auto_addr
+
+
+@contextlib.contextmanager
+def prod_gw_addrs(config: PCDSConfiguration):
+    """
+    Preset for prod_addr_list context manager that selects gateways only.
+
+    This only works while on a gateway host.
+    """
+    with prod_addr_list(config, ['dev']):
+        yield
+
+
+@contextlib.contextmanager
+def prod_ioc_addrs(config: PCDSConfiguration):
+    """
+    Preset for prod_addr_list context manager that selects IOC hosts only.
+
+    This only works while on a gateway host.
+    """
+    with prod_addr_list(
+        config,
+        [subnet for subnet in config.interface_config.subnets.keys()
+         if subnet not in ('dev', 'srv')]
+    ):
+        yield
 
 
 def pyepics_caput(
