@@ -89,7 +89,7 @@ except KeyError:
 
 if not os.path.exists(gateway_executable):
     raise RuntimeError(
-        f"Gateway executable {gateway_executable} does not exist; set GW_SITE_TOP."
+        f"Gateway executable {gateway_executable} does not exist; set GATEWAY_ROOT."
     )
 
 if "IOC_EPICS_BASE" in os.environ:
@@ -99,10 +99,12 @@ if "IOC_EPICS_BASE" in os.environ:
 elif "EPICS_BASE" in os.environ:
     ioc_executable = os.path.join(os.environ["EPICS_BASE"], "bin", hostArch, "softIoc")
 else:
-    ioc_executable = shutil.which("softIoc")
+    ioc_executable = None
 
 if not ioc_executable or not os.path.exists(ioc_executable):
-    raise RuntimeError(f"softIoc path {ioc_executable} does not exist")
+    ioc_executable = shutil.which("softIoc")
+    if not ioc_executable:
+        raise RuntimeError(f"softIoc path {ioc_executable} does not exist")
 
 
 @contextlib.contextmanager
