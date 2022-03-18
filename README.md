@@ -83,3 +83,5 @@ Notes on tests
 
 * ``test_undefined_timestamp`` does not sufficiently trigger the issue it
   intends to.  It needs revisiting.
+
+https://confluence.slac.stanford.edu/display/PCDS/Gateway+testing+by+way+of+pcds-gateway-tests
