@@ -18,11 +18,12 @@ configuration are referred to as "prod config" tests and are located in
 Test Requirements
 -----------------
 
-* Python 3.8+
-* pytest
-* pytest-xdist (*)
-* [pyepics](https://github.com/pyepics/pyepics)
+* Python 3.9+ (type annotations will fail on earlier versions)
 * [caproto](https://github.com/caproto/caproto)
+* [numpy](https://numpy.org/)
+* [pyepics](https://github.com/pyepics/pyepics)
+* [pytest-xdist](https://github.com/pytest-dev/pytest-xdist) (*)
+* [pytest](https://github.com/pytest-dev/pytest)
 
 For production configuration tests, the following dependencies are also
 required:
@@ -78,9 +79,12 @@ GATEWAY_ROOT=/cds/group/pcds/epics/extensions/gateway/R2.1.2.0-1.2.0/ \
 ```
 
 You can also just use ``pytest`` directly, as indicated by the ``make`` output
-above.  Just be sure you use ``--forked`` mode, otherwise the tools we have
-built in to reconfigure EPICS CA environment variables specifically for testing
-may not work correctly.
+above.  Just be sure you use ``--forked`` mode when running more than one
+test.  The test suite will fail all subsequent tests after the first one
+otherwise.  This is largely due to working around pyepics's flimsy support
+for clearing and creating new CA contexts and not something we really have
+control over.
+
 
 Notes on tests
 --------------

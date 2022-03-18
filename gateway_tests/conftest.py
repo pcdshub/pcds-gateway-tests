@@ -36,13 +36,13 @@ import pytest
 
 import epics
 
-from .constants import MODULE_PATH, PCDS_ACCESS
-from .util import PVInfo
-
 # Don't let ophyd's control layer get in the way of pyepics's initialization.
 # If left to the default, pyepics will initialize libca with the current
 # environment's configuration.
 os.environ["OPHYD_CONTROL_LAYER"] = "dummy"
+
+from .constants import MODULE_PATH, PCDS_ACCESS  # noqa: E402  # isort: skip
+from .util import PVInfo  # noqa: E402 # isort: skip
 
 try:
     from .config import PCDSConfiguration
@@ -129,7 +129,9 @@ def run_process(
     startup_time: float = 0.5,
     wait_for: Optional[bytes] = None,
 ):
-    """Run ``cmd`` and yield a subprocess.Popen instance."""
+    """
+    Run ``cmd`` and yield a subprocess.Popen instance.
+    """
     verbose = True
     logger.info("Running: %s (verbose=%s)", " ".join(cmd), verbose)
 
@@ -142,6 +144,7 @@ def run_process(
     )
 
     stdout = None
+    event = threading.Event()
 
     def read_stdout():
         """Read standard output in a background thread."""
@@ -178,11 +181,9 @@ def run_process(
                     textwrap.indent(str(stdout), "    "),
                 )
 
-    event = threading.Event()
     threading.Thread(daemon=True, target=read_stdout).start()
 
-    # Arbitrary startup time
-    # time.sleep(startup_time)
+    # Wait for the "ready" message event, up to ``startup_time`` seconds
     event.wait(startup_time)
     try:
         yield proc
