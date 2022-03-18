@@ -77,11 +77,29 @@ GATEWAY_ROOT=/cds/group/pcds/epics/extensions/gateway/R2.1.2.0-1.2.0/ \
                                 -k simple
 ```
 
+You can also just use ``pytest`` directly, as indicated by the ``make`` output
+above.  Just be sure you use ``--forked`` mode, otherwise the tools we have
+built in to reconfigure EPICS CA environment variables specifically for testing
+may not work correctly.
 
 Notes on tests
 --------------
 
 * ``test_undefined_timestamp`` does not sufficiently trigger the issue it
   intends to.  It needs revisiting.
+* For the process tests, each test spawns its own gateway instance and its own
+  IOC instance.
+* The default test database has a prefix of ``ioc:``, but tests may communicate
+  to the same PV through the gateway instance by swapping that prefix for
+  ``gateway:``.  This is a fundamental pattern reused in many tests here.
+  The gateway configurations (``gateway_tests/process/pvlist*.txt``) include
+  this alias rule which does this: ``gateway:\(.*\)  ALIAS ioc:\1``.
+* PCRE and BRE pvlist configurations for the gateway are available and may be
+  configured by way of the ``GATEWAY_PVLIST`` environment variable.
+* The gateway process and the IOC process work on different
+  ``EPICS_CA_SERVER_PORT`` settings, making communicating with one or the other
+  a matter of environment variable configuration.
+* Though we use pytest-xdist, the port configuration here does not allow for
+  parallel testing, so do not use ``-n`` values of ``>= 2``.
 
 https://confluence.slac.stanford.edu/display/PCDS/Gateway+testing+by+way+of+pcds-gateway-tests
