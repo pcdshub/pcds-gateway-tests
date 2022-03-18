@@ -34,7 +34,13 @@ from typing import Any, ContextManager, Generator, Iterable, Optional, Protocol
 import epics
 import pytest
 
-from .config import PCDSConfiguration
+try:
+    from .config import PCDSConfiguration
+except ImportError:
+    # PCDSConfiguration should be optional, but prod_tests will not function
+    # without it.
+    PCDSConfiguration = None
+
 from .constants import MODULE_PATH, PCDS_ACCESS
 from .util import PVInfo
 
