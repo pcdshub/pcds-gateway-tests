@@ -26,17 +26,30 @@ import shutil
 import subprocess
 import tempfile
 import textwrap
+import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from typing import Any, ContextManager, Generator, Iterable, Optional, Protocol
 
-import epics
 import pytest
 
-from .config import PCDSConfiguration
-from .constants import MODULE_PATH, PCDS_ACCESS
-from .util import PVInfo
+import epics
+
+# Don't let ophyd's control layer get in the way of pyepics's initialization.
+# If left to the default, pyepics will initialize libca with the current
+# environment's configuration.
+os.environ["OPHYD_CONTROL_LAYER"] = "dummy"
+
+from .constants import MODULE_PATH, PCDS_ACCESS  # noqa: E402  # isort: skip
+from .util import PVInfo  # noqa: E402 # isort: skip
+
+try:
+    from .config import PCDSConfiguration
+except ImportError:
+    # PCDSConfiguration should be optional, but prod_tests will not function
+    # without it.
+    PCDSConfiguration = None
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +60,8 @@ if "PYEPICS_LIBCA" not in os.environ and os.path.exists(libca_so):
     os.environ["PYEPICS_LIBCA"] = libca_so
 
 # CA ports to use
-default_ioc_port = 12782
-default_gw_port = 12783
+default_ioc_port = 62782
+default_gw_port = 62783
 default_access = os.environ.get(
     "GATEWAY_ACCESS", str(MODULE_PATH / "process" / "default_access.txt")
 )
@@ -89,7 +102,7 @@ except KeyError:
 
 if not os.path.exists(gateway_executable):
     raise RuntimeError(
-        f"Gateway executable {gateway_executable} does not exist; set GW_SITE_TOP."
+        f"Gateway executable {gateway_executable} does not exist; set GATEWAY_ROOT."
     )
 
 if "IOC_EPICS_BASE" in os.environ:
@@ -99,43 +112,90 @@ if "IOC_EPICS_BASE" in os.environ:
 elif "EPICS_BASE" in os.environ:
     ioc_executable = os.path.join(os.environ["EPICS_BASE"], "bin", hostArch, "softIoc")
 else:
-    ioc_executable = shutil.which("softIoc")
+    ioc_executable = None
 
 if not ioc_executable or not os.path.exists(ioc_executable):
-    raise RuntimeError(f"softIoc path {ioc_executable} does not exist")
+    ioc_executable = shutil.which("softIoc")
+    if not ioc_executable:
+        raise RuntimeError(f"softIoc path {ioc_executable} does not exist")
 
 
 @contextlib.contextmanager
 def run_process(
     cmd: list[str],
     env: dict[str, str],
-    verbose: bool = False,
+    verbose: bool = True,
     interactive: bool = False,
     startup_time: float = 0.5,
+    wait_for: Optional[bytes] = None,
 ):
-    """Run ``cmd`` and yield a subprocess.Popen instance."""
+    """
+    Run ``cmd`` and yield a subprocess.Popen instance.
+    """
+    verbose = True
     logger.info("Running: %s (verbose=%s)", " ".join(cmd), verbose)
 
-    with open(os.devnull, "wb") as dev_null:
-        proc = subprocess.Popen(
-            cmd,
-            env=env,
-            stdin=subprocess.PIPE,
-            stdout=dev_null if not verbose else None,
-            stderr=subprocess.STDOUT,
-        )
-        # Arbitrary startup time
-        time.sleep(startup_time)
-        try:
-            yield proc
-        finally:
-            if interactive:
-                logger.debug("Exiting interactive process %s", cmd[0])
-                proc.stdin.close()
-            else:
-                logger.debug("Terminating non-interactive process %s", cmd[0])
-                proc.terminate()
-            proc.wait()
+    proc = subprocess.Popen(
+        cmd,
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+    stdout = None
+    event = threading.Event()
+
+    def read_stdout():
+        """Read standard output in a background thread."""
+        nonlocal stdout
+        lines = []
+        t0 = time.monotonic()
+        while True:
+            line = proc.stdout.readline()
+            if not line:
+                break
+            if wait_for is not None and wait_for in line:
+                # Set the starting event if we see what we're waiting for
+                # to indicate the process is ready.
+                event.set()
+
+        stdout = b"".join(lines)
+        if verbose:
+            logger.warning(
+                "Read %d bytes from %s in %.1f sec",
+                len(stdout),
+                cmd[0],
+                time.monotonic() - t0,
+            )
+            if stdout:
+                try:
+                    stdout = stdout.decode("latin-1")
+                except Exception:
+                    stdout = str(stdout)
+
+                logger.warning(
+                    "Standard output for %s:\n"
+                    "    %s\n\n",
+                    cmd[0],
+                    textwrap.indent(str(stdout), "    "),
+                )
+
+    threading.Thread(daemon=True, target=read_stdout).start()
+
+    # Wait for the "ready" message event, up to ``startup_time`` seconds
+    event.wait(startup_time)
+    try:
+        yield proc
+    finally:
+        if interactive:
+            logger.debug("Exiting interactive process %s", cmd[0])
+            proc.stdin.close()
+        else:
+            logger.debug("Terminating non-interactive process %s", cmd[0])
+            proc.terminate()
+        proc.wait()
+        logger.info("Process %s exited", cmd[0])
 
 
 @contextlib.contextmanager
@@ -185,7 +245,9 @@ def run_ioc(
 
     cmd.extend(arglist)
 
-    with run_process(cmd, env, verbose=verbose, interactive=True) as proc:
+    with run_process(
+        cmd, env, verbose=verbose, interactive=True, wait_for=b"epics>"
+    ) as proc:
         yield proc
 
 
@@ -241,7 +303,9 @@ def run_gateway(
     if verbose:
         cmd.extend(["-debug", str(gateway_debug_level)])
 
-    with run_process(cmd, os.environ, verbose=verbose, interactive=False) as proc:
+    with run_process(
+        cmd, os.environ, verbose=verbose, interactive=False, wait_for=b"Running as user"
+    ) as proc:
         yield proc
 
 
@@ -259,20 +323,31 @@ def local_channel_access(
         provided, defaults to ``[default_ioc_port, default_gw_port]``.
     """
     if not len(ports):
-        ports = [default_ioc_port, default_gw_port]
+        ports = (default_ioc_port, default_gw_port)
 
     address_list = " ".join(f"localhost:{port}" for port in ports)
+    if epics.ca.libca is not None:  # epics.ca.libca is not epics.ca._LIBCA_FINALIZED
+        pytest.fail(
+            msg=(
+                "epics.ca.libca already initialized: "
+                "Some library initialized pyepics before pcds-gateway-tests "
+                "could configure the environment, or tests were run without "
+                "using pytest-fork and --forked. "
+                "Because the tests will fail - or worse, the process will "
+                "segfault - we are bailing early."
+            )
+        )
+
     with context_set_env("EPICS_CA_AUTO_ADDR_LIST", "NO"):
         with context_set_env("EPICS_CA_ADDR_LIST", address_list):
             epics.ca.initialize_libca()
             try:
                 yield
             finally:
-                # This may lead to instability - probably should only run one test per
-                # process
+                # This may lead to instability - probably should only run one
+                # test per process
                 epics.ca.clear_cache()
                 epics.ca.finalize_libca()
-                time.sleep(0.2)
 
 
 @contextlib.contextmanager

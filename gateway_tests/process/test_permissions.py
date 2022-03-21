@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 # Keep the header with regex rules separate; \\ is a pain to deal with in
 # strings.
+#
+# NOTE: this pvlist is done in BRE regex format and not PCRE and assumes
+# the gateway was built with it.
 pvlist_header = r"""
 EVALUATION ORDER ALLOW, DENY
 gateway:\(.*\)  ALIAS ioc:\1
