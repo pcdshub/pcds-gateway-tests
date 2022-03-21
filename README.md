@@ -86,6 +86,57 @@ for clearing and creating new CA contexts and not something we really have
 control over.
 
 
+Included process tests
+----------------------
+
+* ``CS studio``: VALUE|ALARM with time structure, PROPERTY with control
+  structure
+* ``DBE_ALARM``: alarm severity transitions are accurate
+* ``DBE_LOG``: archive deadband settings respected
+* ``DBE_PROPERTY``: HIHI/LOLO/HI/LO changes result in monitor events
+* ``DBE_VALUE``: simply ensure monitors are consistent
+* ``enum_property_cache``: PV property cache for enum data (2 xfails; did not
+  dig into details); stale enum data check (passes)
+* ``enum_undefined_timestamp``: SLAC-reported timestamp issue of undefined
+  timestamps for enum PVs.
+* ``property_cache``: EGU, limit, etc. updated and then verified valid using a
+  CTRL request
+* ``structures``: CTRL metadata identical in monitor events
+* ``waveform_with_max_ca_array_bytes``: gateway segfault check when IOC
+  ``EPICS_CA_MAX_ARRAY_BYTES`` is set too low
+
+Additional SLAC-created tests:
+
+* ``enum_undefined_timestamp``: SLAC-reported timestamp issue of undefined
+  timestamps for enum PVs now easily reproduces the issue. Additional test for
+  this lingering issue.
+* ``subscriptions``: verify subscription metadata for the matrix of settings
+  below, upon connection and after performing a number of caputs
+  * ``DBE_{VALUE,LOG,ALARM,PROPERTY}`` (and a mix thereof) CTRL and TIME types
+  * Records used in the test suite
+* ``permissions``: validate that access security groups work as expected
+  * Allow by host/user (*), deny by specific IP (DENY FROM), blanket deny
+* ``logging``: verify caPutLog behavior
+  * For provided records, perform a caput and verify the log output is valid.
+    Similarly, check the TCP output
+
+Included production configuration tests
+---------------------------------------
+
+New production tests
+
+* Base a new test suite on our production PCDS configuration
+* Gather data from whatrecord
+  * Python-parsed gateway configuration (.pvlist) and access security (.acf)
+    happi database device mapping to PVs
+* Add in pertinent test suite information
+  * Map PV to IOC -> IOC to host -> host to subnet
+  * Per gateway-host interface information
+* With all of the above, run on a gateway host to check
+   * Access rights are correct according to the configuration
+   * PV metadata is accurate from the gateway versus the IOC
+* Produce human-readable results of any discrepancies
+
 Notes on tests
 --------------
 
